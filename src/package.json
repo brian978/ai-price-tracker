@@ -1,0 +1,8 @@
+{
+  "devDependencies": {
+    "@types/chrome": "^0.0.323"
+  },
+  "dependencies": {
+    "sharp": "^0.32.1"
+  }
+}

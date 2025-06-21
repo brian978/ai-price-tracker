@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="css/options.css">
+  <title>AI Price Tracker Settings</title>
+</head>
+<body>
+  <div class="container">
+    <h1>AI Price Tracker Settings</h1>
+
+    <div class="settings-section">
+      <h2>OpenAI API Key</h2>
+      <p>
+        Enter your OpenAI API key below. This is required for the price tracking functionality.
+        <br>
+        You can get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI's API Keys page</a>.
+      </p>
+
+      <div class="form-group">
+        <label for="api-key">API Key:</label>
+        <input type="password" id="api-key" placeholder="sk-...">
+        <button id="show-hide-btn">Show</button>
+      </div>
+
+      <div class="button-container">
+        <button id="save-btn">Save</button>
+      </div>
+
+      <div id="status-message"></div>
+    </div>
+
+    <div class="settings-section">
+      <h2>View Mode</h2>
+      <p>
+        Choose how you want to access the AI Price Tracker interface.
+        <br>
+        <strong>Popup:</strong> Opens in a small popup window when you click the extension icon.
+        <br>
+        <strong>Sidebar:</strong> Opens in a sidebar panel for easier access and more space.
+      </p>
+
+      <div class="form-group">
+        <label for="view-mode">View Mode:</label>
+        <select id="view-mode">
+          <option value="popup">Popup</option>
+          <option value="sidebar">Sidebar</option>
+        </select>
+      </div>
+
+      <div class="button-container">
+        <button id="save-view-btn">Save View Mode</button>
+      </div>
+
+      <div id="view-status-message"></div>
+    </div>
+
+    <div class="settings-section">
+      <h2>About</h2>
+      <p>
+        AI Price Tracker uses OpenAI's API to extract price information from product pages.
+        <br>
+        The extension requires an API key to function properly.
+      </p>
+    </div>
+  </div>
+
+  <script src="js/options.js"></script>
+</body>
+</html>

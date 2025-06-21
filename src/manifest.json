@@ -1,0 +1,42 @@
+{
+  "manifest_version": 2,
+  "name": "AI Price Tracker",
+  "version": "1.0",
+  "description": "Track prices using OpenAI API",
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "<all_urls>"
+  ],
+  "browser_action": {
+    "default_icon": {
+      "48": "icons/icon-48.png"
+    },
+    "default_title": "AI Price Tracker",
+    "default_popup": "popup/popup.html"
+  },
+  "sidebar_action": {
+    "default_icon": {
+      "48": "icons/icon-48.png"
+    },
+    "default_title": "AI Price Tracker",
+    "default_panel": "sidebar/sidebar.html"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "scripts": ["background/background.js"]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ai-price-tracker@anon.com"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": {
+    "license": "GPL-3.0-only"
+  },
+  "categories": {
+    "firefox": [
+      "other"
+    ]
+  }
+}

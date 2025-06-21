@@ -1,0 +1,52 @@
+name: Sign and Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Install web-ext
+        run: npm install -g web-ext
+
+      - name: Installing dependencies
+        run: |
+          cd src
+          npm install
+
+      - name: Signing (Firefox)
+        env:
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: web-ext sign -s ./src -a ./dist --channel=listed --amo-metadata=./src/metadata.json --api-key="$AMO_JWT_ISSUER" --api-secret="$AMO_JWT_SECRET"
+          
+      - name: Renaming the extension
+        run: |
+          chmod +x ./rename.sh
+          bash ./rename.sh
+
+      - name: Upload .xpi file
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: ./dist/*.xpi
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./dist/*.xpi
+        env:
+          GITHUB_TOKEN: ${{ secrets.EXT_TOKEN }}
