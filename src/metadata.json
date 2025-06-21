@@ -1,10 +1,37 @@
 {
-  "version": {
-    "license": "GPL-3.0-only"
-  },
   "categories": {
-    "firefox": [
-      "other"
-    ]
+    "firefox": ["shopping"]
+  },
+  "summary": {
+    "en-US": "Track prices using OpenAI API"
+  },
+  "description": {
+    "en-US": "A powerful Firefox extension that uses OpenAI's API to automatically track and monitor product prices from any e-commerce website. Features include price history tracking, cross-device synchronization, and both popup and sidebar viewing modes."
+  },
+  "name": {
+    "en-US": "AI Price Tracker"
+  },
+  "developer_comments": {
+    "en-US": "This extension requires users to provide their own OpenAI API key. It stores price tracking data locally and in Firefox sync storage. No data is shared with third parties except OpenAI for price analysis."
+  },
+  "tags": [
+    "price-tracker",
+    "shopping",
+    "openai",
+    "price-monitoring",
+    "e-commerce"
+  ],
+  "default_locale": "en-US",
+  "version": {
+    "license": "MIT",
+    "release_notes": {
+      "en-US": "Initial release featuring:\n• Automatic price extraction using OpenAI API\n• Price history tracking with date stamps\n• Cross-device synchronization\n• Popup and sidebar viewing modes\n• Support for any e-commerce website"
+    },
+    "compatibility": {
+      "firefox": {
+        "min": "139.0",
+        "max": "*"
+      }
+    }
   }
 }
