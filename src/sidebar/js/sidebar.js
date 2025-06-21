@@ -349,7 +349,11 @@ async function displayPrices() {
 
     if (currentItemPrices.length === 0) {
       const row = document.createElement('tr');
-      row.innerHTML = '<td colspan="3" style="text-align: center;">No prices tracked for this item</td>';
+      const cell = document.createElement('td');
+      cell.setAttribute('colspan', '3');
+      cell.style.textAlign = 'center';
+      cell.textContent = 'No prices tracked for this item';
+      row.appendChild(cell);
       tableBody.appendChild(row);
       return;
     }
@@ -366,11 +370,24 @@ async function displayPrices() {
       const dateObj = new Date(entry.date);
       const formattedDate = dateObj.toLocaleDateString();
 
-      row.innerHTML = `
-        <td>${formattedDate}</td>
-        <td>${entry.price}</td>
-        <td><span class="delete-entry" data-index="${trackedPrices.indexOf(entry)}">🗑️</span></td>
-      `;
+      // Create date cell
+      const dateCell = document.createElement('td');
+      dateCell.textContent = formattedDate;
+      row.appendChild(dateCell);
+
+      // Create price cell
+      const priceCell = document.createElement('td');
+      priceCell.textContent = entry.price;
+      row.appendChild(priceCell);
+
+      // Create delete cell
+      const deleteCell = document.createElement('td');
+      const deleteSpan = document.createElement('span');
+      deleteSpan.className = 'delete-entry';
+      deleteSpan.setAttribute('data-index', trackedPrices.indexOf(entry).toString());
+      deleteSpan.textContent = '🗑️';
+      deleteCell.appendChild(deleteSpan);
+      row.appendChild(deleteCell);
 
       tableBody.appendChild(row);
     });
@@ -436,7 +453,11 @@ function displayItems() {
   const items = Object.entries(trackedItems);
 
   if (items.length === 0) {
-    itemsList.innerHTML = '<div style="text-align: center; padding: 20px;">No items tracked yet</div>';
+    const noItemsDiv = document.createElement('div');
+    noItemsDiv.style.textAlign = 'center';
+    noItemsDiv.style.padding = '20px';
+    noItemsDiv.textContent = 'No items tracked yet';
+    itemsList.appendChild(noItemsDiv);
     return;
   }
 
@@ -449,10 +470,20 @@ function displayItems() {
       item.name.substring(0, 37) + '...' : 
       item.name;
 
-    itemEntry.innerHTML = `
-      <div class="item-name" title="${item.name}" data-url="${url}">${truncatedName}</div>
-      <div class="delete-item" data-url="${url}">🗑️</div>
-    `;
+    // Create item name div
+    const itemNameDiv = document.createElement('div');
+    itemNameDiv.className = 'item-name';
+    itemNameDiv.setAttribute('title', item.name);
+    itemNameDiv.setAttribute('data-url', url);
+    itemNameDiv.textContent = truncatedName;
+    itemEntry.appendChild(itemNameDiv);
+
+    // Create delete item div
+    const deleteItemDiv = document.createElement('div');
+    deleteItemDiv.className = 'delete-item';
+    deleteItemDiv.setAttribute('data-url', url);
+    deleteItemDiv.textContent = '🗑️';
+    itemEntry.appendChild(deleteItemDiv);
 
     itemsList.appendChild(itemEntry);
   });

@@ -73,8 +73,11 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Function to track price using OpenAI API
 async function trackPrice (url, apiKey) {
   try {
+    // Get the page content first
+    const pageContent = await getPageContent()
+
     // Extract information using OpenAI API
-    const extractedData = await extractDataWithOpenAI(url, apiKey)
+    const extractedData = await extractDataWithOpenAI(url, apiKey, pageContent)
 
     return extractedData
   } catch (error) {
@@ -83,16 +86,65 @@ async function trackPrice (url, apiKey) {
   }
 }
 
+// Function to get the content of the current page
+async function getPageContent() {
+  try {
+    // Get the current active tab
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
+
+    // Execute a content script to get the page content
+    const results = await browser.tabs.executeScript(tab.id, {
+      code: `
+        // Get the body content
+        const bodyElement = document.body;
+        const bodyText = bodyElement ? bodyElement.innerText : '';
+
+        // Return half of the body content to avoid too large requests
+        const halfLength = Math.floor(bodyText.length / 2);
+        const halfBodyContent = bodyText.substring(0, halfLength);
+
+        ({
+          title: document.title,
+          bodyContent: halfBodyContent,
+          url: window.location.href
+        });
+      `
+    })
+
+    return results[0]
+  } catch (error) {
+    console.error('Error getting page content:', error)
+    throw new Error('Could not access page content. Make sure you are on a product page.')
+  }
+}
+
 // Function to extract data using OpenAI API
-async function extractDataWithOpenAI (url, apiKey) {
+async function extractDataWithOpenAI (url, apiKey, pageContent) {
   try {
     // Prepare the prompt for OpenAI
     const prompt = `
           You are analyzing a product page at this URL: ${url}
 
-          Please extract the following information from the page:
-          - The product name
+          Page Title: ${pageContent.title}
+
+          Page Content (first half of body):
+          ${pageContent.bodyContent}
+
+          Please extract the following information from the page content above:
+          - The normalized product name
           - The current price (including currency symbol)
+
+          For example if a product is called "Amazing Phone, Apple iPhone 13 Pro Max, 256 GB, lastest iOS" and the price is $1,000.00,
+          the extracted data should be:
+          { "name": "Apple iPhone 13 Pro Max, 256 GB", "price": "$1,000.00" }
+
+          Another example, if a product is called "Kärcher 2.863-089.0 Plastic Parking Station" and the price is $1,
+          the extracted data should be:
+          { "name": "Kärcher Plastic Parking Station", "price": "$1" }
+
+          Last example, if a product is called "Insta360 Ace Pro 2 Double Battery Bundle - 8K Waterproof Action Camera Designed with Leica, 1/1.3 Inch Sensor, Dual AI Chip System, Leading Low Light Performance, Best Audio, Flip Screen & AI Editin" and the price is €100.99,
+          then the extracted data should be:
+          { "name": "Insta360 Ace Pro 2 Double Battery Bundle", "price": "€100.99" }
 
           Return ONLY the JSON formatted string with these fields:
           - name: The product name
