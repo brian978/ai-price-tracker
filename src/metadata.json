@@ -15,11 +15,7 @@
     "en-US": "This extension requires users to provide their own OpenAI API key. It stores price tracking data locally and in Firefox sync storage. No data is shared with third parties except OpenAI for price analysis."
   },
   "tags": [
-    "price-tracker",
-    "shopping",
-    "openai",
-    "price-monitoring",
-    "e-commerce"
+    "shopping"
   ],
   "default_locale": "en-US",
   "version": {
