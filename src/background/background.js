@@ -32,7 +32,7 @@ async function initializeViewMode() {
   }
 }
 
-// Listen for extension icon clicks (only called when popup is disabled)
+// Listen for extension icon clicks (only called when the popup is disabled)
 browser.browserAction.onClicked.addListener((tab, info) => {
   // Call open() first while still in the user input handler context
   browser.sidebarAction.open().catch(console.error);
