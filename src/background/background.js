@@ -1,34 +1,34 @@
-async function getViewMode () {
-  const result = await browser.storage.local.get('viewMode')
+async function getViewMode() {
+  const result = await browser.storage.local.get('viewMode');
 
-  return result.viewMode || 'popup'
+  return result.viewMode || 'popup';
 }
 
 // Set the view mode (popup or sidebar)
-async function setViewMode (viewMode) {
+async function setViewMode(viewMode) {
   try {
     if (viewMode === 'sidebar') {
       // Disable popup so click handler is called
-      await browser.browserAction.setPopup({ popup: '' })
+      await browser.browserAction.setPopup({ popup: '' });
     } else {
       // Enable popup for normal popup behavior
-      await browser.browserAction.setPopup({ popup: 'popup/popup.html' })
+      await browser.browserAction.setPopup({ popup: 'popup/popup.html' });
     }
   } catch (error) {
-    console.error('Error setting view mode:', error)
+    console.error('Error setting view mode:', error);
   }
 }
 
 
 // Initialize view mode on startup
-async function initializeViewMode () {
+async function initializeViewMode() {
   try {
-    const viewMode = await getViewMode()
-    await setViewMode(viewMode)
+    const viewMode = await getViewMode();
+    await setViewMode(viewMode);
   } catch (error) {
-    console.error('Error initializing view mode:', error)
+    console.error('Error initializing view mode:', error);
     // Default to popup mode
-      await setViewMode('popup')
+    await setViewMode('popup');
   }
 }
 
@@ -46,7 +46,7 @@ browser.storage.onChanged.addListener(async (changes, areaName) => {
   if (areaName === 'local') {
     // Handle view mode changes
     if (changes.viewMode) {
-      await setViewMode(changes.viewMode.newValue)
+      await setViewMode(changes.viewMode.newValue);
     }
     
     // Handle price alarm setting changes
@@ -57,7 +57,7 @@ browser.storage.onChanged.addListener(async (changes, areaName) => {
         // Create the alarm if it was enabled
         browser.alarms.create(PRICE_CHECK_ALARM_NAME, {
           periodInMinutes: 60 // Check once per hour
-        });
+        }).catch(error => console.error('Error creating alarm:', error));
         console.log('Price tracking alarm enabled via settings change');
       } else {
         // Clear the alarm if it was disabled
@@ -66,53 +66,53 @@ browser.storage.onChanged.addListener(async (changes, areaName) => {
       }
     }
   }
-})
+});
 
 browser.runtime.onInstalled.addListener(() => {
   // noinspection JSIgnoredPromiseFromCall
-  initializeViewMode()
+  initializeViewMode();
   
   // Initialize price tracking on installation
-  initializePriceTracking()
-})
+  initializePriceTracking();
+});
 
 browser.runtime.onStartup.addListener(() => {
   // noinspection JSIgnoredPromiseFromCall
-  initializeViewMode()
+  initializeViewMode();
   
   // Initialize price tracking on startup
-  initializePriceTracking()
-})
+  initializePriceTracking();
+});
 
 // Listen for messages from the popup/sidebar
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'trackPrice') {
-    trackPrice(message.url, message.apiKey).
-      then(result => {
+    trackPrice(message.url, message.apiKey)
+      .then(result => {
         // After tracking the price, set up periodic checking for this URL
-        setupPriceTracking(message.url, result.price)
-        sendResponse(result)
-      }).
-      catch(error => sendResponse({ error: error.message }))
+        setupPriceTracking(message.url, result.price);
+        sendResponse(result);
+      })
+      .catch(error => sendResponse({ error: error.message }));
 
     // Return true to indicate we will send a response asynchronously
-    return true
+    return true;
   }
-})
+});
 
 // Function to track price using OpenAI API
-async function trackPrice (url, apiKey) {
+async function trackPrice(url, apiKey) {
   try {
     // Get the page content first
-    const pageContent = await getPageContent()
+    const pageContent = await getPageContent();
 
     // Extract information using OpenAI API
-    const extractedData = await extractDataWithOpenAI(url, apiKey, pageContent)
+    const extractedData = await extractDataWithOpenAI(url, apiKey, pageContent);
 
-    return extractedData
+    return extractedData;
   } catch (error) {
-    console.error('Error in trackPrice:', error)
-    throw new Error('Failed to track price: ' + error.message)
+    console.error('Error in trackPrice:', error);
+    throw new Error('Failed to track price: ' + error.message);
   }
 }
 
@@ -120,7 +120,7 @@ async function trackPrice (url, apiKey) {
 async function getPageContent() {
   try {
     // Get the current active tab
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true })
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
 
     // Execute a content script to get the page content
     const results = await browser.tabs.executeScript(tab.id, {
@@ -139,17 +139,17 @@ async function getPageContent() {
           url: window.location.href
         });
       `
-    })
+    });
 
-    return results[0]
+    return results[0];
   } catch (error) {
-    console.error('Error getting page content:', error)
-    throw new Error('Could not access page content. Make sure you are on a product page.')
+    console.error('Error getting page content:', error);
+    throw new Error('Could not access page content. Make sure you are on a product page.');
   }
 }
 
 // Function to extract data using OpenAI API
-async function extractDataWithOpenAI (url, apiKey, pageContent) {
+async function extractDataWithOpenAI(url, apiKey, pageContent) {
   try {
     // Prepare the prompt for OpenAI
     const prompt = `
@@ -179,10 +179,10 @@ async function extractDataWithOpenAI (url, apiKey, pageContent) {
           Return ONLY the JSON formatted string with these fields:
           - name: The product name
           - price: The product price
-        `
+        `;
 
     // Make request to OpenAI API
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -198,55 +198,55 @@ async function extractDataWithOpenAI (url, apiKey, pageContent) {
         input: prompt,
         temperature: 0.3,
       }),
-    })
+    });
 
     if (!response.ok) {
-      const errorData = await response.json()
+      const errorData = await response.json();
       throw new Error(
-        `OpenAI API error: ${errorData.error?.message || 'Unknown error'}`)
+        `OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
     }
 
-    const data = await response.json()
+    const data = await response.json();
 
     // Check if the response has the expected structure
     if (!data.output || !Array.isArray(data.output)) {
-      console.error('Unexpected API response format:', data)
-      throw new Error('Invalid response format from OpenAI API')
+      console.error('Unexpected API response format:', data);
+      throw new Error('Invalid response format from OpenAI API');
     }
 
     // Find the message output in the response
-    const messageOutput = data.output.find(item => item.type === 'message')
+    const messageOutput = data.output.find(item => item.type === 'message');
     if (!messageOutput || !messageOutput.content ||
       !messageOutput.content.length) {
-      console.error('No message output found in response:', data)
-      throw new Error('Invalid response format from OpenAI API')
+      console.error('No message output found in response:', data);
+      throw new Error('Invalid response format from OpenAI API');
     }
 
     // Get the text content from the message
     const textContent = messageOutput.content.find(
-      item => item.type === 'output_text')
+      item => item.type === 'output_text');
     if (!textContent || !textContent.text) {
-      console.error('No text content found in message:', messageOutput)
-      throw new Error('No text content found in the API response')
+      console.error('No text content found in message:', messageOutput);
+      throw new Error('No text content found in the API response');
     }
 
     try {
-      const extractedData = JSON.parse(textContent.text)
+      const extractedData = JSON.parse(textContent.text);
 
       // Validate the extracted data
       if (!extractedData.name || !extractedData.price) {
-        throw new Error('Could not extract product information from this page')
+        throw new Error('Could not extract product information from this page');
       }
 
-      return extractedData
+      return extractedData;
     } catch (jsonError) {
-      console.error('Error parsing JSON:', jsonError)
+      console.error('Error parsing JSON:', jsonError);
       throw new Error(
-        'Failed to parse JSON from the API response: ' + jsonError.message)
+        'Failed to parse JSON from the API response: ' + jsonError.message);
     }
   } catch (error) {
-    console.error('Error extracting data with OpenAI:', error)
-    throw new Error('Failed to extract data: ' + error.message)
+    console.error('Error extracting data with OpenAI:', error);
+    throw new Error('Failed to extract data: ' + error.message);
   }
 }
 
@@ -266,7 +266,7 @@ async function initializePriceTracking() {
     if (priceAlarmEnabled) {
       browser.alarms.create(PRICE_CHECK_ALARM_NAME, {
         periodInMinutes: 60 // Check once per hour
-      });
+      }).catch(error => console.error('Error creating price check alarm:', error));
       console.log('Price tracking alarm created - automatic checking enabled');
       
       // BROWSER RESTART HANDLING:
@@ -342,7 +342,7 @@ async function setupPriceTracking(url, initialPrice) {
     if (!alarms.some(a => a.name === PRICE_CHECK_ALARM_NAME)) {
       browser.alarms.create(PRICE_CHECK_ALARM_NAME, {
         periodInMinutes: 60 // Check once per hour
-      });
+      }).catch(error => console.error('Error creating price check alarm:', error));
       console.log('Price check alarm created');
     }
   } catch (error) {
