@@ -107,8 +107,8 @@ async function trackPrice(url, apiKey) {
     let pageContent;
     
     try {
-      // Try to get content from active tab
-      pageContent = await getPageContent();
+      // Try to get content from active tab, passing the target URL to ensure we're on the right page
+      pageContent = await getPageContent(url);
     } catch (contentError) {
       console.log('Could not get content from active tab, trying to fetch directly:', contentError.message);
       // If we can't get content from active tab, try to fetch it directly
@@ -144,7 +144,7 @@ async function trackPrice(url, apiKey) {
 }
 
 // Function to get the content of the current page
-async function getPageContent() {
+async function getPageContent(targetUrl = null) {
   try {
     // Get the current active tab
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -163,12 +163,21 @@ async function getPageContent() {
         ({
           title: document.title,
           bodyContent: halfBodyContent,
-          url: window.location.href
+          url: "${targetUrl || ''}" || window.location.href
         });
       `
     });
 
-    return results[0];
+    const pageContent = results[0];
+    
+    // If a target URL was provided but the content URL doesn't match,
+    // this means we're on a different page than the product we want to track
+    if (targetUrl && pageContent.url !== targetUrl) {
+      console.log('Current page URL does not match target product URL, fetching directly instead');
+      throw new Error('Page URL mismatch');
+    }
+
+    return pageContent;
   } catch (error) {
     console.error('Error getting page content:', error);
     throw new Error('Could not access page content. Make sure you are on a product page.');
@@ -308,9 +317,65 @@ const TRACKED_PRICES_STORAGE_KEY = 'trackedPricesForAlarm';
 async function initializePriceTracking() {
   try {
     // Check if price alarm is enabled and get tracked prices
-    const result = await browser.storage.local.get(['priceAlarmEnabled', TRACKED_PRICES_STORAGE_KEY]);
+    const result = await browser.storage.local.get(['priceAlarmEnabled', TRACKED_PRICES_STORAGE_KEY, 'trackedPrices', 'trackedItems']);
     const priceAlarmEnabled = result.priceAlarmEnabled === true;
-    const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
+    let trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
+    
+    // MIGRATION: Check for older items stored in 'trackedPrices' and 'trackedItems'
+    // This ensures items added before the price tracking feature implementation are also checked
+    const oldTrackedPrices = result.trackedPrices || [];
+    const oldTrackedItems = result.trackedItems || {};
+    
+    // Migrate old items to the new format if they're not already there
+    if (oldTrackedPrices.length > 0 || Object.keys(oldTrackedItems).length > 0) {
+      console.log('Found older tracked items, migrating to new format for price checks');
+      
+      // Process items from oldTrackedPrices
+      // First, group entries by URL and find the most recent price for each
+      const urlToLatestPrice = {};
+      for (const entry of oldTrackedPrices) {
+        if (entry.url && entry.price) {
+          if (!urlToLatestPrice[entry.url] || 
+              new Date(entry.date) > new Date(urlToLatestPrice[entry.url].date)) {
+            urlToLatestPrice[entry.url] = entry;
+          }
+        }
+      }
+      
+      // Now add each URL with its most recent price
+      for (const [url, entry] of Object.entries(urlToLatestPrice)) {
+        if (!trackedPrices[url]) {
+          console.log(`Migrating old tracked price for ${url} (most recent: ${entry.price} from ${entry.date})`);
+          trackedPrices[url] = {
+            price: entry.price,
+            lastChecked: new Date().toISOString()
+          };
+        }
+      }
+      
+      // Process items from oldTrackedItems (in case there are URLs not in oldTrackedPrices)
+      for (const [url, item] of Object.entries(oldTrackedItems)) {
+        if (!trackedPrices[url]) {
+          // Find the most recent price for this item in oldTrackedPrices
+          const priceEntries = oldTrackedPrices.filter(entry => entry.url === url);
+          if (priceEntries.length > 0) {
+            // Sort by date (newest first) and get the most recent price
+            priceEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+            const mostRecentPrice = priceEntries[0].price;
+            
+            console.log(`Migrating old tracked item for ${url} with price ${mostRecentPrice}`);
+            trackedPrices[url] = {
+              price: mostRecentPrice,
+              lastChecked: new Date().toISOString()
+            };
+          }
+        }
+      }
+      
+      // Save the updated trackedPrices
+      await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+      console.log('Migration complete, all old items are now included in price checks');
+    }
     
     // Set up the alarm for hourly price checks only if enabled
     if (priceAlarmEnabled) {
