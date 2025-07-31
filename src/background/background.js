@@ -110,18 +110,24 @@ async function trackPrice(url, apiKey) {
       // Try to get content from active tab
       pageContent = await getPageContent();
     } catch (contentError) {
-      console.log('Could not get content from active tab, using URL directly:', contentError.message);
-      // If we can't get content from active tab, we'll use a minimal pageContent with just the URL
-      pageContent = {
-        title: 'Product Page',
-        bodyContent: 'Product information not available',
-        url: url
-      };
+      console.log('Could not get content from active tab, trying to fetch directly:', contentError.message);
+      // If we can't get content from active tab, try to fetch it directly
+      try {
+        pageContent = await fetchPageContentDirectly(url);
+      } catch (fetchError) {
+        console.log('Could not fetch content directly, using fallback:', fetchError.message);
+        // If direct fetch fails, use a minimal pageContent with just the URL
+        pageContent = {
+          title: 'Product Page',
+          bodyContent: 'Product information not available',
+          url: url
+        };
+      }
     }
 
     // Ensure pageContent is defined before proceeding
     if (!pageContent) {
-      console.log('pageContent is still undefined after getPageContent, creating default object');
+      console.log('pageContent is still undefined after all attempts, creating default object');
       pageContent = {
         title: 'Product Page',
         bodyContent: 'Product information not available',
@@ -421,8 +427,11 @@ async function checkAllPrices() {
       try {
         console.log(`Checking price for ${url}`);
         
-        // Get current price
-        const currentData = await trackPrice(url, apiKey);
+        // Fetch page content directly for background checks
+        let pageContent = await fetchPageContentDirectly(url);
+        
+        // Get current price using the fetched content
+        const currentData = await extractDataWithOpenAI(url, apiKey, pageContent);
         
         // Validate the returned data
         if (!currentData || !currentData.price) {
@@ -577,5 +586,54 @@ async function storePriceCheckHistory(url, productName, price) {
     
   } catch (error) {
     console.error('Error storing price check history:', error);
+  }
+}
+
+// Function to fetch page content directly for background checks
+async function fetchPageContentDirectly(url) {
+  try {
+    console.log(`Fetching page content directly for ${url}`);
+    
+    // Fetch the page content
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
+    }
+    
+    // Get the text content
+    const html = await response.text();
+    
+    // Extract title using regex (simple approach)
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch && titleMatch[1] ? titleMatch[1].trim() : 'Product Page';
+    
+    // Extract body content by removing HTML tags
+    // This is a simple approach that works for most cases
+    const bodyText = html
+      .replace(/<head[\s\S]*?<\/head>/gi, '') // Remove head section
+      .replace(/<script[\s\S]*?<\/script>/gi, '') // Remove scripts
+      .replace(/<style[\s\S]*?<\/style>/gi, '') // Remove styles
+      .replace(/<[^>]+>/g, ' ') // Remove HTML tags
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
+    
+    // Return half of the body content to avoid too large requests
+    const halfLength = Math.min(10000, Math.floor(bodyText.length / 2)); // Limit to 10K chars max
+    const halfBodyContent = bodyText.substring(0, halfLength);
+    
+    return {
+      title: title,
+      bodyContent: halfBodyContent,
+      url: url
+    };
+  } catch (error) {
+    console.error(`Error fetching page content for ${url}:`, error);
+    // Return a minimal pageContent object if fetching fails
+    return {
+      title: 'Product Page',
+      bodyContent: 'Product information not available',
+      url: url
+    };
   }
 }
