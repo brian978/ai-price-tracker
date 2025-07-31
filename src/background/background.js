@@ -130,9 +130,7 @@ async function trackPrice(url, apiKey) {
     }
 
     // Extract information using OpenAI API
-    const extractedData = await extractDataWithOpenAI(url, apiKey, pageContent);
-
-    return extractedData;
+    return await extractDataWithOpenAI(url, apiKey, pageContent);
   } catch (error) {
     console.error('Error in trackPrice:', error);
     throw new Error('Failed to track price: ' + error.message);
@@ -227,7 +225,7 @@ async function extractDataWithOpenAI(url, apiKey, pageContent) {
         `;
 
     // Make request to OpenAI API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -247,6 +245,7 @@ async function extractDataWithOpenAI(url, apiKey, pageContent) {
 
     if (!response.ok) {
       const errorData = await response.json();
+      console.error('OpenAI API error:', errorData);
       throw new Error(
         `OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
     }
