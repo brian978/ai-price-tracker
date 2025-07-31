@@ -355,6 +355,9 @@ async function checkAllPrices() {
         // Update last checked time
         trackedPrices[url].lastChecked = new Date().toISOString();
         
+        // Store price check in history (regardless of price change)
+        await storePriceCheckHistory(url, currentData.name, currentPrice);
+        
         // Compare prices
         if (isPriceLower(currentPrice, oldPrice)) {
           console.log(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
@@ -463,5 +466,33 @@ async function storePriceDropNotification(url, productName, oldPrice, newPrice) 
     
   } catch (error) {
     console.error('Error storing notification history:', error);
+  }
+}
+
+// Store all price checks in history (not just drops)
+async function storePriceCheckHistory(url, productName, price) {
+  try {
+    // Get existing price check history
+    const result = await browser.storage.local.get('priceCheckHistory');
+    const history = result.priceCheckHistory || [];
+    
+    // Add new price check to history
+    history.push({
+      url: url,
+      productName: productName,
+      price: price,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Keep only the most recent 100 price checks
+    if (history.length > 100) {
+      history.shift(); // Remove oldest check
+    }
+    
+    // Save updated history
+    await browser.storage.local.set({ 'priceCheckHistory': history });
+    
+  } catch (error) {
+    console.error('Error storing price check history:', error);
   }
 }

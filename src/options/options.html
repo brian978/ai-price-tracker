@@ -9,81 +9,150 @@
   <div class="container">
     <h1>AI Price Tracker Settings</h1>
 
-    <div class="settings-section">
-      <h2>OpenAI API Key</h2>
-      <p>
-        Enter your OpenAI API key below. This is required for the price tracking functionality.
-        <br>
-        You can get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI's API Keys page</a>.
-      </p>
-
-      <div class="form-group">
-        <label for="api-key">API Key:</label>
-        <input type="password" id="api-key" placeholder="sk-...">
-        <button id="show-hide-btn">Show</button>
-      </div>
-
-      <div class="button-container">
-        <button id="save-btn">Save</button>
-      </div>
-
-      <div id="status-message"></div>
+    <div class="tabs">
+      <button class="tab-button active" data-tab="settings">Settings</button>
+      <button class="tab-button" data-tab="price-history">Price History</button>
+      <button class="tab-button" data-tab="price-drop-history">Price Drop History</button>
     </div>
 
-    <div class="settings-section">
-      <h2>View Mode</h2>
-      <p>
-        Choose how you want to access the AI Price Tracker interface.
-        <br>
-        <strong>Popup:</strong> Opens in a small popup window when you click the extension icon.
-        <br>
-        <strong>Sidebar:</strong> Opens in a sidebar panel for easier access and more space.
-      </p>
+    <div id="settings" class="tab-content active">
+      <div class="settings-section">
+        <h2>OpenAI API Key</h2>
+        <p>
+          Enter your OpenAI API key below. This is required for the price tracking functionality.
+          <br>
+          You can get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI's API Keys page</a>.
+        </p>
 
-      <div class="form-group">
-        <label for="view-mode">View Mode:</label>
-        <select id="view-mode">
-          <option value="popup">Popup</option>
-          <option value="sidebar">Sidebar</option>
-        </select>
+        <div class="form-group">
+          <label for="api-key">API Key:</label>
+          <input type="password" id="api-key" placeholder="sk-...">
+          <button id="show-hide-btn">Show</button>
+        </div>
+
+        <div class="button-container">
+          <button id="save-btn">Save</button>
+        </div>
+
+        <div id="status-message"></div>
       </div>
 
-      <div class="button-container">
-        <button id="save-view-btn">Save View Mode</button>
+      <div class="settings-section">
+        <h2>View Mode</h2>
+        <p>
+          Choose how you want to access the AI Price Tracker interface.
+          <br>
+          <strong>Popup:</strong> Opens in a small popup window when you click the extension icon.
+          <br>
+          <strong>Sidebar:</strong> Opens in a sidebar panel for easier access and more space.
+        </p>
+
+        <div class="form-group">
+          <label for="view-mode">View Mode:</label>
+          <select id="view-mode">
+            <option value="popup">Popup</option>
+            <option value="sidebar">Sidebar</option>
+          </select>
+        </div>
+
+        <div class="button-container">
+          <button id="save-view-btn">Save View Mode</button>
+        </div>
+
+        <div id="view-status-message"></div>
       </div>
 
-      <div id="view-status-message"></div>
+      <div class="settings-section">
+        <h2>Price Tracking Alarm</h2>
+        <p>
+          Enable automatic price checking for tracked products.
+        </p>
+        
+        <div class="form-group">
+          <input type="checkbox" id="price-alarm-enabled">
+          <label for="price-alarm-enabled">Enable hourly price checks</label>
+        </div>
+        
+        <p class="warning-text">
+          <strong>Note:</strong> Enabling this option will burn through credits faster as it will do an hourly check on prices using the LLM.
+        </p>
+
+        <div class="button-container">
+          <button id="save-alarm-btn">Save Alarm Setting</button>
+        </div>
+        
+        <div id="alarm-status-message"></div>
+      </div>
+
+      <div class="settings-section">
+        <h2>About</h2>
+        <p>
+          AI Price Tracker uses OpenAI's API to extract price information from product pages.
+          <br>
+          The extension requires an API key to function properly.
+        </p>
+      </div>
     </div>
 
-    <div class="settings-section">
-      <h2>Price Tracking Alarm</h2>
-      <p>
-        Enable automatic price checking for tracked products.
-      </p>
-      
-      <div class="form-group">
-        <input type="checkbox" id="price-alarm-enabled">
-        <label for="price-alarm-enabled">Enable hourly price checks</label>
+    <div id="price-history" class="tab-content">
+      <div class="settings-section">
+        <h2>Price History</h2>
+        <p>
+          View the history of price checks for your tracked products.
+        </p>
+        
+        <div id="history-container">
+          <div id="empty-history" class="hidden">
+            <p>No price checks have been recorded yet.</p>
+            <p>Once the extension checks prices for your tracked products, they will be displayed here.</p>
+          </div>
+          
+          <table id="history-table" class="hidden">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Price</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body">
+              <!-- History entries will be added here dynamically -->
+            </tbody>
+          </table>
+        </div>
       </div>
-      
-      <p class="warning-text">
-        <strong>Note:</strong> Enabling this option will burn through credits faster as it will do an hourly check on prices using the LLM.
-      </p>
-
-      <div class="button-container">
-        <button id="save-alarm-btn">Save Alarm Setting</button>
-      </div>
-      
-      <div id="alarm-status-message"></div>
     </div>
-
-    <div class="settings-section">
-      <h2>About</h2>
-      <p>
-        AI Price Tracker uses OpenAI's API to extract price information from product pages.
-        <br>
-        The extension requires an API key to function properly.
-      </p>
+    
+    <div id="price-drop-history" class="tab-content">
+      <div class="settings-section">
+        <h2>Price Drop History</h2>
+        <p>
+          View the history of price drops detected for your tracked products.
+        </p>
+        
+        <div id="drop-history-container">
+          <div id="empty-drop-history" class="hidden">
+            <p>No price drops have been detected yet.</p>
+            <p>Once the extension detects a price drop, it will be displayed here.</p>
+          </div>
+          
+          <table id="drop-history-table" class="hidden">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Old Price</th>
+                <th>New Price</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="drop-history-table-body">
+              <!-- Price drop history entries will be added here dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
