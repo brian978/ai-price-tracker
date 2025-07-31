@@ -32,8 +32,8 @@ function loadOptions() {
         document.getElementById('api-key').value = localResult.apiKey;
       }
       
-      // Get other settings from sync storage
-      return browser.storage.sync.get(['viewMode', 'priceAlarmEnabled']);
+      // Get other settings from local storage
+      return browser.storage.local.get(['viewMode', 'priceAlarmEnabled']);
     })
     .then(syncResult => {
       if (syncResult.viewMode) {
@@ -56,7 +56,7 @@ function loadOptions() {
 function saveViewMode() {
   const viewMode = document.getElementById('view-mode').value;
 
-  browser.storage.sync.set({ viewMode: viewMode })
+  browser.storage.local.set({ viewMode: viewMode })
     .then(() => {
       showViewStatusMessage('View mode saved successfully! Please reload the extension to apply changes.', 'success');
     })
@@ -110,7 +110,7 @@ function showViewStatusMessage(message, type) {
 function savePriceAlarmSetting() {
   const priceAlarmEnabled = document.getElementById('price-alarm-enabled').checked;
 
-  browser.storage.sync.set({ priceAlarmEnabled: priceAlarmEnabled })
+  browser.storage.local.set({ priceAlarmEnabled: priceAlarmEnabled })
     .then(() => {
       showAlarmStatusMessage(`Price alarm ${priceAlarmEnabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     })
@@ -160,7 +160,7 @@ function setupTabs() {
 
 // Load price history from storage and display it
 function loadPriceHistory() {
-  browser.storage.sync.get('priceCheckHistory')
+  browser.storage.local.get('priceCheckHistory')
     .then(result => {
       const history = result.priceCheckHistory || [];
       displayPriceHistory(history);
@@ -215,7 +215,7 @@ function displayPriceHistory(history) {
 
 // Load price drop history from storage and display it
 function loadPriceDropHistory() {
-  browser.storage.sync.get('priceDropHistory')
+  browser.storage.local.get('priceDropHistory')
     .then(result => {
       const history = result.priceDropHistory || [];
       displayPriceDropHistory(history);

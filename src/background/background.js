@@ -1,5 +1,5 @@
 async function getViewMode() {
-  const result = await browser.storage.sync.get('viewMode');
+  const result = await browser.storage.local.get('viewMode');
   return result.viewMode || 'popup';
 }
 
@@ -327,9 +327,9 @@ const TRACKED_PRICES_STORAGE_KEY = 'trackedPricesForAlarm';
 // Initialize the price tracking system
 async function initializePriceTracking() {
   try {
-    // Check if price alarm is enabled and get tracked prices from sync storage
-    const result = await browser.storage.sync.get(['priceAlarmEnabled', TRACKED_PRICES_STORAGE_KEY, 'trackedPrices', 'trackedItems']);
-    console.log('Successfully retrieved data from sync storage');
+    // Check if price alarm is enabled and get tracked prices from local storage
+    const result = await browser.storage.local.get(['priceAlarmEnabled', TRACKED_PRICES_STORAGE_KEY, 'trackedPrices', 'trackedItems']);
+    console.log('Successfully retrieved data from local storage');
     
     const priceAlarmEnabled = result.priceAlarmEnabled === true;
     let trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
@@ -392,9 +392,9 @@ async function initializePriceTracking() {
         }
       }
       
-      // Save the updated trackedPrices to sync storage
-      await browser.storage.sync.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
-      console.log('Migration complete, all old items saved to sync storage');
+      // Save the updated trackedPrices to local storage
+      await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+      console.log('Migration complete, all old items saved to local storage');
     }
     
     // BROWSER RESTART HANDLING:
@@ -464,9 +464,9 @@ async function handleAlarm(alarm) {
 // Set up price tracking for a specific URL
 async function setupPriceTracking(url, initialPrice) {
   try {
-    // Get currently tracked prices from sync storage
-    const result = await browser.storage.sync.get(TRACKED_PRICES_STORAGE_KEY);
-    console.log('Successfully retrieved tracked prices from sync storage');
+    // Get currently tracked prices from local storage
+    const result = await browser.storage.local.get(TRACKED_PRICES_STORAGE_KEY);
+    console.log('Successfully retrieved tracked prices from local storage');
     
     const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
     
@@ -476,9 +476,9 @@ async function setupPriceTracking(url, initialPrice) {
       lastChecked: new Date().toISOString()
     };
     
-    // Save to sync storage
-    await browser.storage.sync.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
-    console.log(`Price tracking set up for ${url} with initial price ${initialPrice} (saved to sync storage)`);
+    // Save to local storage
+    await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+    console.log(`Price tracking set up for ${url} with initial price ${initialPrice} (saved to local storage)`);
     
     console.log(`Price tracking set up for ${url} with initial price ${initialPrice}`);
     
@@ -500,15 +500,13 @@ async function checkAllPrices() {
   try {
     console.log('Checking prices for all tracked items...');
     
-    // Get tracked prices and settings from sync storage (except apiKey which is in local storage)
-    const syncResult = await browser.storage.sync.get([TRACKED_PRICES_STORAGE_KEY, 'priceAlarmEnabled']);
-    // Get API key from local storage
-    const localResult = await browser.storage.local.get(['apiKey']);
-    console.log('Successfully retrieved price tracking data from storage');
+    // Get tracked prices and settings from local storage
+    const result = await browser.storage.local.get([TRACKED_PRICES_STORAGE_KEY, 'priceAlarmEnabled', 'apiKey']);
+    console.log('Successfully retrieved price tracking data from local storage');
     
-    const trackedPrices = syncResult[TRACKED_PRICES_STORAGE_KEY] || {};
-    const apiKey = localResult.apiKey;
-    const priceAlarmEnabled = syncResult.priceAlarmEnabled === true;
+    const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
+    const apiKey = result.apiKey;
+    const priceAlarmEnabled = result.priceAlarmEnabled === true;
     
     // Check if price alarm is enabled
     if (!priceAlarmEnabled) {
@@ -574,8 +572,8 @@ async function checkAllPrices() {
       }
     }
     
-    // Save updated tracking data to sync storage
-    await browser.storage.sync.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+    // Save updated tracking data to local storage
+    await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
     
   } catch (error) {
     console.error('Error checking prices:', error);
@@ -619,8 +617,8 @@ async function sendPriceDropNotification(url, productName, oldPrice, newPrice) {
       browser.notifications.onClicked.addListener(handleNotificationClick);
     }
     
-    // Store the URL for this notification in sync storage
-    await browser.storage.sync.set({ 'lastNotificationUrl': url });
+    // Store the URL for this notification in local storage
+    await browser.storage.local.set({ 'lastNotificationUrl': url });
     
   } catch (error) {
     console.error('Error sending notification:', error);
@@ -629,7 +627,7 @@ async function sendPriceDropNotification(url, productName, oldPrice, newPrice) {
 
 // Handle notification click
 function handleNotificationClick(notificationId) {
-  browser.storage.sync.get('lastNotificationUrl').then(result => {
+  browser.storage.local.get('lastNotificationUrl').then(result => {
     if (result.lastNotificationUrl) {
       browser.tabs.create({ url: result.lastNotificationUrl });
     }
@@ -639,8 +637,8 @@ function handleNotificationClick(notificationId) {
 // Store price drop notification in history
 async function storePriceDropNotification(url, productName, oldPrice, newPrice) {
   try {
-    // Get existing notification history from sync storage
-    const result = await browser.storage.sync.get('priceDropHistory');
+    // Get existing notification history from local storage
+    const result = await browser.storage.local.get('priceDropHistory');
     const history = result.priceDropHistory || [];
 
     // Add new notification to history
@@ -657,8 +655,8 @@ async function storePriceDropNotification(url, productName, oldPrice, newPrice) 
       history.shift(); // Remove oldest notification
     }
 
-    // Save updated history to sync storage
-    await browser.storage.sync.set({ 'priceDropHistory': history });
+    // Save updated history to local storage
+    await browser.storage.local.set({ 'priceDropHistory': history });
     
   } catch (error) {
     console.error('Error storing notification history:', error);
@@ -668,8 +666,8 @@ async function storePriceDropNotification(url, productName, oldPrice, newPrice) 
 // Store all price checks in history (not just drops)
 async function storePriceCheckHistory(url, productName, price) {
   try {
-    // Get existing price check history from sync storage
-    const result = await browser.storage.sync.get('priceCheckHistory');
+    // Get existing price check history from local storage
+    const result = await browser.storage.local.get('priceCheckHistory');
     const history = result.priceCheckHistory || [];
     
     // Add new price check to history
@@ -685,8 +683,8 @@ async function storePriceCheckHistory(url, productName, price) {
       history.shift(); // Remove oldest check
     }
     
-    // Save updated history to sync storage
-    await browser.storage.sync.set({ 'priceCheckHistory': history });
+    // Save updated history to local storage
+    await browser.storage.local.set({ 'priceCheckHistory': history });
     
   } catch (error) {
     console.error('Error storing price check history:', error);
@@ -698,9 +696,9 @@ async function checkTrackedItemsOnEnable() {
   try {
     console.log('Checking all tracked items after enabling price tracking...');
     
-    // Get tracked prices from sync storage
-    const result = await browser.storage.sync.get([TRACKED_PRICES_STORAGE_KEY]);
-    console.log('Successfully retrieved tracked items from sync storage for checking after enable');
+    // Get tracked prices from local storage
+    const result = await browser.storage.local.get([TRACKED_PRICES_STORAGE_KEY]);
+    console.log('Successfully retrieved tracked items from local storage for checking after enable');
     
     const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
     
@@ -724,9 +722,9 @@ async function checkAllTrackedItemsOnRefresh() {
   try {
     console.log('Checking all tracked items after extension refresh...');
     
-    // Get tracked prices from sync storage
-    const result = await browser.storage.sync.get([TRACKED_PRICES_STORAGE_KEY, 'trackedPrices', 'trackedItems']);
-    console.log('Successfully retrieved tracked items from sync storage for refresh check');
+    // Get tracked prices from local storage
+    const result = await browser.storage.local.get([TRACKED_PRICES_STORAGE_KEY, 'trackedPrices', 'trackedItems']);
+    console.log('Successfully retrieved tracked items from local storage for refresh check');
     
     // Extract data from result
     let trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
@@ -783,9 +781,9 @@ async function checkAllTrackedItemsOnRefresh() {
         }
       }
       
-      // Save the updated trackedPrices to sync storage
-      await browser.storage.sync.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
-      console.log('Migration complete during refresh, all old items saved to sync storage');
+      // Save the updated trackedPrices to local storage
+      await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+      console.log('Migration complete during refresh, all old items saved to local storage');
     }
     
     if (Object.keys(trackedPrices).length === 0) {
@@ -871,9 +869,9 @@ async function checkItemsOnStartup(trackedPrices) {
       }
     }
     
-    // Save updated tracking data to sync storage
-    await browser.storage.sync.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
-    console.log('Updated tracking data saved to sync storage after startup check');
+    // Save updated tracking data to local storage
+    await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+    console.log('Updated tracking data saved to local storage after startup check');
     
   } catch (error) {
     console.error('Error checking prices on startup:', error);

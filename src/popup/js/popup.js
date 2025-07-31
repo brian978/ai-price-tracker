@@ -24,15 +24,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 // Load data from storage with fallback
 async function loadData() {
   try {
-    // Try to load from sync storage first
-    let result;
-    try {
-      result = await browser.storage.sync.get(['trackedPrices', 'trackedItems']);
-    } catch (syncError) {
-      console.warn('Sync storage not available, falling back to local storage:', syncError);
-      // Fallback to local storage if sync storage fails
-      result = await browser.storage.local.get(['trackedPrices', 'trackedItems']);
-    }
+    // Load from local storage
+    const result = await browser.storage.local.get(['trackedPrices', 'trackedItems']);
 
     trackedPrices = result.trackedPrices || [];
     trackedItems = result.trackedItems || {};
@@ -142,23 +135,14 @@ async function customConfirm(message, title = 'Confirm Action') {
   return await showModal(title, message);
 }
 
-// Save data to storage with fallback
+// Save data to storage
 async function saveData() {
   try {
-    // Try to save to sync storage first
-    try {
-      await browser.storage.sync.set({
-        trackedPrices: trackedPrices,
-        trackedItems: trackedItems
-      });
-    } catch (syncError) {
-      console.warn('Sync storage not available, falling back to local storage:', syncError);
-      // Fallback to local storage if sync storage fails
-      await browser.storage.local.set({
-        trackedPrices: trackedPrices,
-        trackedItems: trackedItems
-      });
-    }
+    // Save to local storage
+    await browser.storage.local.set({
+      trackedPrices: trackedPrices,
+      trackedItems: trackedItems
+    });
 
     // Show success notification when saving after tracking a price
     if (arguments.length > 0 && arguments[0] === 'track') {
@@ -334,18 +318,45 @@ async function trackPrice() {
   }
 }
 
+// Normalize URL by removing query parameters, fragments, and trailing slashes
+function normalizeUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    // Remove query parameters and fragment, normalize trailing slash
+    return urlObj.origin + urlObj.pathname.replace(/\/$/, '');
+  } catch (error) {
+    console.error('Error normalizing URL:', url, error);
+    return url; // Return original URL if parsing fails
+  }
+}
+
 // Display tracked prices
 async function displayPrices() {
   const tableBody = document.getElementById('prices-table-body');
-  tableBody.innerHTML = '';
 
   try {
     // Get current tab URL
     const tabs = await browser.tabs.query({active: true, currentWindow: true});
+    
+    // Check if we got valid tab data
+    if (!tabs || tabs.length === 0 || !tabs[0] || !tabs[0].url) {
+      console.warn('Could not get current tab URL, keeping existing table content');
+      return; // Don't clear the table if we can't get the URL
+    }
+    
     const currentUrl = tabs[0].url;
+    console.log('displayPrices() called for URL:', currentUrl);
 
-    // Filter prices for the current URL only
-    const currentItemPrices = trackedPrices.filter(entry => entry.url === currentUrl);
+    // Filter prices for the current URL using normalized URL matching
+    const normalizedCurrentUrl = normalizeUrl(currentUrl);
+    const currentItemPrices = trackedPrices.filter(entry => {
+      const normalizedStoredUrl = normalizeUrl(entry.url);
+      return normalizedStoredUrl === normalizedCurrentUrl;
+    });
+    console.log(`Found ${currentItemPrices.length} prices for current URL (normalized matching)`);
+
+    // Only clear the table after we know what content to show
+    tableBody.innerHTML = '';
 
     if (currentItemPrices.length === 0) {
       const row = document.createElement('tr');
