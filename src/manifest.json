@@ -11,7 +11,9 @@
     "activeTab",
     "storage",
     "tabs",
-    "<all_urls>"
+    "<all_urls>",
+    "alarms",
+    "notifications"
   ],
   "browser_action": {
     "default_icon": {
