@@ -566,6 +566,11 @@ async function checkAllPrices() {
         }
       } catch (error) {
         console.error(`Error checking price for ${url}:`, error);
+        // If it's a 503 error, skip price tracking for this item
+        if (error.message && error.message.includes('503_SERVICE_UNAVAILABLE')) {
+          console.log(`Skipping price tracking for ${url} due to 503 Service Unavailable error`);
+          continue; // Skip to the next URL without updating lastChecked
+        }
       }
     }
     
@@ -858,6 +863,11 @@ async function checkItemsOnStartup(trackedPrices) {
         }
       } catch (error) {
         console.error(`Error checking price for ${url} on startup:`, error);
+        // If it's a 503 error, skip price tracking for this item
+        if (error.message && error.message.includes('503_SERVICE_UNAVAILABLE')) {
+          console.log(`Skipping price tracking for ${url} due to 503 Service Unavailable error`);
+          continue; // Skip to the next URL without updating lastChecked
+        }
       }
     }
     
@@ -879,6 +889,10 @@ async function fetchPageContentDirectly(url) {
     const response = await fetch(url);
     
     if (!response.ok) {
+      // If response is 503, throw a specific error to skip price tracking
+      if (response.status === 503) {
+        throw new Error(`503_SERVICE_UNAVAILABLE: Failed to fetch page: ${response.status} ${response.statusText}`);
+      }
       throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
     }
     
@@ -910,7 +924,11 @@ async function fetchPageContentDirectly(url) {
     };
   } catch (error) {
     console.error(`Error fetching page content for ${url}:`, error);
-    // Return a minimal pageContent object if fetching fails
+    // If it's a 503 error, re-throw it so calling functions can handle it
+    if (error.message && error.message.includes('503_SERVICE_UNAVAILABLE')) {
+      throw error;
+    }
+    // Return a minimal pageContent object if fetching fails for other errors
     return {
       title: 'Product Page',
       bodyContent: 'Product information not available',
