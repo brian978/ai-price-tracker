@@ -257,9 +257,10 @@ const TRACKED_PRICES_STORAGE_KEY = 'trackedPricesForAlarm';
 // Initialize the price tracking system
 async function initializePriceTracking() {
   try {
-    // Check if price alarm is enabled
-    const result = await browser.storage.local.get('priceAlarmEnabled');
+    // Check if price alarm is enabled and get tracked prices
+    const result = await browser.storage.local.get(['priceAlarmEnabled', TRACKED_PRICES_STORAGE_KEY]);
     const priceAlarmEnabled = result.priceAlarmEnabled === true;
+    const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
     
     // Set up the alarm for hourly price checks only if enabled
     if (priceAlarmEnabled) {
@@ -267,6 +268,35 @@ async function initializePriceTracking() {
         periodInMinutes: 60 // Check once per hour
       });
       console.log('Price tracking alarm created - automatic checking enabled');
+      
+      // BROWSER RESTART HANDLING:
+      // Since browser alarms don't run when the browser is closed, we need to check
+      // if any products should have been checked while the browser was closed.
+      // This ensures that even if a user opens their browser for short periods,
+      // price checks will still happen at roughly hourly intervals.
+      const now = new Date();
+      let needsImmediateCheck = false;
+      
+      // Check if any product hasn't been checked in the last hour
+      for (const [url, data] of Object.entries(trackedPrices)) {
+        if (data.lastChecked) {
+          const lastChecked = new Date(data.lastChecked);
+          const hoursSinceLastCheck = (now - lastChecked) / (1000 * 60 * 60);
+          
+          if (hoursSinceLastCheck >= 1) {
+            console.log(`Product ${url} hasn't been checked in ${hoursSinceLastCheck.toFixed(2)} hours`);
+            needsImmediateCheck = true;
+            break; // One product needing a check is enough to trigger
+          }
+        }
+      }
+      
+      // If any product needs a check, do it immediately instead of waiting for the next alarm
+      if (needsImmediateCheck && Object.keys(trackedPrices).length > 0) {
+        console.log('Some products have not been checked in over an hour, performing immediate check');
+        // Use setTimeout to allow the extension to fully initialize first
+        setTimeout(() => checkAllPrices(), 5000);
+      }
     } else {
       // Make sure alarm is cleared if disabled
       await browser.alarms.clear(PRICE_CHECK_ALARM_NAME);
