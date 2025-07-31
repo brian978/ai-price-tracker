@@ -57,6 +57,12 @@ label {
   font-weight: bold;
 }
 
+/* Checkbox label styling */
+input[type="checkbox"] + label {
+  width: auto;
+  margin-left: 10px;
+}
+
 input[type="password"],
 input[type="text"],
 select {
@@ -130,4 +136,15 @@ button:hover {
   color: #a94442;
   border: 1px solid #ebccd1;
   display: block !important;
+}
+
+/* Warning text for credit usage */
+.warning-text {
+  background-color: #fcf8e3;
+  color: #8a6d3b;
+  border: 1px solid #faebcc;
+  padding: 10px;
+  border-radius: 4px;
+  margin-top: 10px;
+  font-size: 14px;
 }

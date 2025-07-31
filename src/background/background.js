@@ -41,28 +41,58 @@ browser.browserAction.onClicked.addListener((tab, info) => {
   browser.sidebarAction.setPanel({ panel: 'sidebar/sidebar.html' }).catch(console.error);
 });
 
-// Listen for storage changes to update view mode
+// Listen for storage changes to update view mode and price alarm settings
 browser.storage.onChanged.addListener(async (changes, areaName) => {
-  if (areaName === 'local' && changes.viewMode) {
-    await setViewMode(changes.viewMode.newValue)
+  if (areaName === 'local') {
+    // Handle view mode changes
+    if (changes.viewMode) {
+      await setViewMode(changes.viewMode.newValue)
+    }
+    
+    // Handle price alarm setting changes
+    if (changes.priceAlarmEnabled !== undefined) {
+      const priceAlarmEnabled = changes.priceAlarmEnabled.newValue === true;
+      
+      if (priceAlarmEnabled) {
+        // Create the alarm if it was enabled
+        browser.alarms.create(PRICE_CHECK_ALARM_NAME, {
+          periodInMinutes: 60 // Check once per hour
+        });
+        console.log('Price tracking alarm enabled via settings change');
+      } else {
+        // Clear the alarm if it was disabled
+        await browser.alarms.clear(PRICE_CHECK_ALARM_NAME);
+        console.log('Price tracking alarm disabled via settings change');
+      }
+    }
   }
 })
 
 browser.runtime.onInstalled.addListener(() => {
   // noinspection JSIgnoredPromiseFromCall
   initializeViewMode()
+  
+  // Initialize price tracking on installation
+  initializePriceTracking()
 })
 
 browser.runtime.onStartup.addListener(() => {
   // noinspection JSIgnoredPromiseFromCall
   initializeViewMode()
+  
+  // Initialize price tracking on startup
+  initializePriceTracking()
 })
 
 // Listen for messages from the popup/sidebar
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'trackPrice') {
     trackPrice(message.url, message.apiKey).
-      then(result => sendResponse(result)).
+      then(result => {
+        // After tracking the price, set up periodic checking for this URL
+        setupPriceTracking(message.url, result.price)
+        sendResponse(result)
+      }).
       catch(error => sendResponse({ error: error.message }))
 
     // Return true to indicate we will send a response asynchronously
@@ -217,5 +247,221 @@ async function extractDataWithOpenAI (url, apiKey, pageContent) {
   } catch (error) {
     console.error('Error extracting data with OpenAI:', error)
     throw new Error('Failed to extract data: ' + error.message)
+  }
+}
+
+// Price tracking functionality
+const PRICE_CHECK_ALARM_NAME = 'priceCheckAlarm';
+const TRACKED_PRICES_STORAGE_KEY = 'trackedPricesForAlarm';
+
+// Initialize the price tracking system
+async function initializePriceTracking() {
+  try {
+    // Check if price alarm is enabled
+    const result = await browser.storage.local.get('priceAlarmEnabled');
+    const priceAlarmEnabled = result.priceAlarmEnabled === true;
+    
+    // Set up the alarm for hourly price checks only if enabled
+    if (priceAlarmEnabled) {
+      browser.alarms.create(PRICE_CHECK_ALARM_NAME, {
+        periodInMinutes: 60 // Check once per hour
+      });
+      console.log('Price tracking alarm created - automatic checking enabled');
+    } else {
+      // Make sure alarm is cleared if disabled
+      await browser.alarms.clear(PRICE_CHECK_ALARM_NAME);
+      console.log('Price tracking alarm disabled - automatic checking disabled');
+    }
+    
+    // Listen for alarm events
+    browser.alarms.onAlarm.addListener(handleAlarm);
+    
+    console.log('Price tracking system initialized');
+  } catch (error) {
+    console.error('Error initializing price tracking:', error);
+  }
+}
+
+// Handle alarm events
+async function handleAlarm(alarm) {
+  if (alarm.name === PRICE_CHECK_ALARM_NAME) {
+    await checkAllPrices();
+  }
+}
+
+// Set up price tracking for a specific URL
+async function setupPriceTracking(url, initialPrice) {
+  try {
+    // Get currently tracked prices
+    const result = await browser.storage.local.get(TRACKED_PRICES_STORAGE_KEY);
+    const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
+    
+    // Add or update the URL with its price
+    trackedPrices[url] = {
+      price: initialPrice,
+      lastChecked: new Date().toISOString()
+    };
+    
+    // Save back to storage
+    await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+    
+    console.log(`Price tracking set up for ${url} with initial price ${initialPrice}`);
+    
+    // Make sure the alarm is set up
+    const alarms = await browser.alarms.getAll();
+    if (!alarms.some(a => a.name === PRICE_CHECK_ALARM_NAME)) {
+      browser.alarms.create(PRICE_CHECK_ALARM_NAME, {
+        periodInMinutes: 60 // Check once per hour
+      });
+      console.log('Price check alarm created');
+    }
+  } catch (error) {
+    console.error('Error setting up price tracking:', error);
+  }
+}
+
+// Check prices for all tracked URLs
+async function checkAllPrices() {
+  try {
+    console.log('Checking prices for all tracked items...');
+    
+    // Get tracked prices and settings
+    const result = await browser.storage.local.get([TRACKED_PRICES_STORAGE_KEY, 'apiKey', 'priceAlarmEnabled']);
+    const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
+    const apiKey = result.apiKey;
+    const priceAlarmEnabled = result.priceAlarmEnabled === true;
+    
+    // Check if price alarm is enabled
+    if (!priceAlarmEnabled) {
+      console.log('Price alarm is disabled, skipping price checks');
+      return;
+    }
+    
+    if (!apiKey) {
+      console.warn('No API key found, cannot check prices');
+      return;
+    }
+    
+    // Check each URL
+    for (const [url, data] of Object.entries(trackedPrices)) {
+      try {
+        console.log(`Checking price for ${url}`);
+        
+        // Get current price
+        const currentData = await trackPrice(url, apiKey);
+        const currentPrice = currentData.price;
+        const oldPrice = data.price;
+        
+        // Update last checked time
+        trackedPrices[url].lastChecked = new Date().toISOString();
+        
+        // Compare prices
+        if (isPriceLower(currentPrice, oldPrice)) {
+          console.log(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
+          
+          // Update stored price
+          trackedPrices[url].price = currentPrice;
+          
+          // Send notification
+          await sendPriceDropNotification(url, currentData.name, oldPrice, currentPrice);
+          
+          // Store notification in history
+          await storePriceDropNotification(url, currentData.name, oldPrice, currentPrice);
+        } else {
+          console.log(`No price drop for ${url}, old: ${oldPrice}, current: ${currentPrice}`);
+        }
+      } catch (error) {
+        console.error(`Error checking price for ${url}:`, error);
+      }
+    }
+    
+    // Save updated tracking data
+    await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+    
+  } catch (error) {
+    console.error('Error checking prices:', error);
+  }
+}
+
+// Compare prices to determine if there's a drop
+function isPriceLower(currentPrice, oldPrice) {
+  // Extract numeric values from price strings
+  const extractNumeric = (priceStr) => {
+    const matches = priceStr.match(/[\d,.]+/);
+    if (matches && matches.length > 0) {
+      // Replace commas with dots and parse as float
+      return parseFloat(matches[0].replace(/,/g, '.').replace(/[^\d.]/g, ''));
+    }
+    return 0;
+  };
+  
+  const currentNumeric = extractNumeric(currentPrice);
+  const oldNumeric = extractNumeric(oldPrice);
+  
+  console.log(`Comparing prices: ${oldNumeric} (old) vs ${currentNumeric} (current)`);
+  
+  // Return true if current price is lower
+  return currentNumeric < oldNumeric;
+}
+
+// Send browser notification for price drop
+async function sendPriceDropNotification(url, productName, oldPrice, newPrice) {
+  try {
+    await browser.notifications.create({
+      type: 'basic',
+      iconUrl: browser.runtime.getURL('icons/icon-96.png'),
+      title: 'Price Drop Alert!',
+      message: `${productName} price dropped from ${oldPrice} to ${newPrice}!`,
+      contextMessage: 'Click to open product page'
+    });
+    
+    // Set up notification click handler if not already set
+    if (!browser.notifications.onClicked.hasListener(handleNotificationClick)) {
+      browser.notifications.onClicked.addListener(handleNotificationClick);
+    }
+    
+    // Store the URL for this notification
+    await browser.storage.local.set({ 'lastNotificationUrl': url });
+    
+  } catch (error) {
+    console.error('Error sending notification:', error);
+  }
+}
+
+// Handle notification click
+function handleNotificationClick(notificationId) {
+  browser.storage.local.get('lastNotificationUrl').then(result => {
+    if (result.lastNotificationUrl) {
+      browser.tabs.create({ url: result.lastNotificationUrl });
+    }
+  }).catch(console.error);
+}
+
+// Store price drop notification in history
+async function storePriceDropNotification(url, productName, oldPrice, newPrice) {
+  try {
+    // Get existing notification history
+    const result = await browser.storage.local.get('priceDropHistory');
+    const history = result.priceDropHistory || [];
+    
+    // Add new notification to history
+    history.push({
+      url: url,
+      productName: productName,
+      oldPrice: oldPrice,
+      newPrice: newPrice,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Keep only the most recent 50 notifications
+    if (history.length > 50) {
+      history.shift(); // Remove oldest notification
+    }
+    
+    // Save updated history
+    await browser.storage.local.set({ 'priceDropHistory': history });
+    
+  } catch (error) {
+    console.error('Error storing notification history:', error);
   }
 }

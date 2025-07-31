@@ -56,6 +56,28 @@
     </div>
 
     <div class="settings-section">
+      <h2>Price Tracking Alarm</h2>
+      <p>
+        Enable automatic price checking for tracked products.
+      </p>
+      
+      <div class="form-group">
+        <input type="checkbox" id="price-alarm-enabled">
+        <label for="price-alarm-enabled">Enable hourly price checks</label>
+      </div>
+      
+      <p class="warning-text">
+        <strong>Note:</strong> Enabling this option will burn through credits faster as it will do an hourly check on prices using the LLM.
+      </p>
+
+      <div class="button-container">
+        <button id="save-alarm-btn">Save Alarm Setting</button>
+      </div>
+      
+      <div id="alarm-status-message"></div>
+    </div>
+
+    <div class="settings-section">
       <h2>About</h2>
       <p>
         AI Price Tracker uses OpenAI's API to extract price information from product pages.

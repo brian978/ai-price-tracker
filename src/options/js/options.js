@@ -25,7 +25,7 @@ function saveOptions() {
 
 // Load saved API key from storage
 function loadOptions() {
-  browser.storage.local.get(['apiKey', 'viewMode'])
+  browser.storage.local.get(['apiKey', 'viewMode', 'priceAlarmEnabled'])
     .then(result => {
       if (result.apiKey) {
         document.getElementById('api-key').value = result.apiKey;
@@ -36,6 +36,10 @@ function loadOptions() {
         // Default to popup if no preference is set
         document.getElementById('view-mode').value = 'popup';
       }
+      
+      // Set price alarm checkbox (default to off if not set)
+      const priceAlarmCheckbox = document.getElementById('price-alarm-enabled');
+      priceAlarmCheckbox.checked = result.priceAlarmEnabled === true;
     })
     .catch(error => {
       console.error('Error loading options:', error);
@@ -96,6 +100,33 @@ function showViewStatusMessage(message, type) {
   }, 5000);
 }
 
+// Save the price alarm setting
+function savePriceAlarmSetting() {
+  const priceAlarmEnabled = document.getElementById('price-alarm-enabled').checked;
+
+  browser.storage.local.set({ priceAlarmEnabled: priceAlarmEnabled })
+    .then(() => {
+      showAlarmStatusMessage(`Price alarm ${priceAlarmEnabled ? 'enabled' : 'disabled'} successfully!`, 'success');
+    })
+    .catch(error => {
+      console.error('Error saving price alarm setting:', error);
+      showAlarmStatusMessage('Error saving price alarm setting. Please try again.', 'error');
+    });
+}
+
+// Display alarm status message
+function showAlarmStatusMessage(message, type) {
+  const statusElement = document.getElementById('alarm-status-message');
+  statusElement.textContent = message;
+  statusElement.className = type;
+
+  // Clear the message after 3 seconds
+  setTimeout(() => {
+    statusElement.className = '';
+    statusElement.textContent = '';
+  }, 3000);
+}
+
 // Initialize the options page
 document.addEventListener('DOMContentLoaded', () => {
   // Load saved options
@@ -105,4 +136,5 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('save-btn').addEventListener('click', saveOptions);
   document.getElementById('show-hide-btn').addEventListener('click', toggleApiKeyVisibility);
   document.getElementById('save-view-btn').addEventListener('click', saveViewMode);
+  document.getElementById('save-alarm-btn').addEventListener('click', savePriceAlarmSetting);
 });
