@@ -104,7 +104,30 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function trackPrice(url, apiKey) {
   try {
     // Get the page content first
-    const pageContent = await getPageContent();
+    let pageContent;
+    
+    try {
+      // Try to get content from active tab
+      pageContent = await getPageContent();
+    } catch (contentError) {
+      console.log('Could not get content from active tab, using URL directly:', contentError.message);
+      // If we can't get content from active tab, we'll use a minimal pageContent with just the URL
+      pageContent = {
+        title: 'Product Page',
+        bodyContent: 'Product information not available',
+        url: url
+      };
+    }
+
+    // Ensure pageContent is defined before proceeding
+    if (!pageContent) {
+      console.log('pageContent is still undefined after getPageContent, creating default object');
+      pageContent = {
+        title: 'Product Page',
+        bodyContent: 'Product information not available',
+        url: url
+      };
+    }
 
     // Extract information using OpenAI API
     const extractedData = await extractDataWithOpenAI(url, apiKey, pageContent);
@@ -151,16 +174,38 @@ async function getPageContent() {
 // Function to extract data using OpenAI API
 async function extractDataWithOpenAI(url, apiKey, pageContent) {
   try {
+    // Validate pageContent and its properties
+    if (!pageContent) {
+      console.log('Page content is undefined, creating default pageContent object');
+      pageContent = {
+        title: 'Product Page',
+        bodyContent: 'Product information not available',
+        url: url
+      };
+    }
+    
+    const title = pageContent.title || 'Unknown Title';
+    const bodyContent = pageContent.bodyContent || 'No content available';
+    const pageUrl = pageContent.url || url;
+    
+    // Determine if we're using fallback content
+    const usingFallback = bodyContent === 'Product information not available';
+    
     // Prepare the prompt for OpenAI
     const prompt = `
-          You are analyzing a product page at this URL: ${url}
+          You are analyzing a product page at this URL: ${pageUrl}
 
-          Page Title: ${pageContent.title}
+          Page Title: ${title}
 
-          Page Content (first half of body):
-          ${pageContent.bodyContent}
+          ${usingFallback ? 
+            `I don't have the page content, but I need you to analyze the URL: ${pageUrl}
+             Please extract product information directly from the URL structure.` 
+            : 
+            `Page Content (first half of body):
+             ${bodyContent}`
+          }
 
-          Please extract the following information from the page content above:
+          Please extract the following information from the ${usingFallback ? 'URL' : 'page content'} above:
           - The normalized product name
           - The current price (including currency symbol)
 
@@ -379,6 +424,15 @@ async function checkAllPrices() {
         
         // Get current price
         const currentData = await trackPrice(url, apiKey);
+        
+        // Validate the returned data
+        if (!currentData || !currentData.price) {
+          console.error(`Invalid data returned for ${url}:`, currentData);
+          // Update last checked time even if we couldn't get a valid price
+          trackedPrices[url].lastChecked = new Date().toISOString();
+          continue; // Skip to the next URL
+        }
+        
         const currentPrice = currentData.price;
         const oldPrice = data.price;
         
@@ -386,7 +440,7 @@ async function checkAllPrices() {
         trackedPrices[url].lastChecked = new Date().toISOString();
         
         // Store price check in history (regardless of price change)
-        await storePriceCheckHistory(url, currentData.name, currentPrice);
+        await storePriceCheckHistory(url, currentData.name || 'Unknown Product', currentPrice);
         
         // Compare prices
         if (isPriceLower(currentPrice, oldPrice)) {
