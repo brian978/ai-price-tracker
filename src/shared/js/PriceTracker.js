@@ -1,3 +1,4 @@
+// Logger dependency: Logger.js must be loaded before this script
 /**
  * Base class for Price Tracker functionality
  * Contains all common functionality shared between popup and sidebar
@@ -49,7 +50,7 @@ class PriceTracker {
       // Display current item if on a product page
       await this.displayCurrentItem();
     } catch (error) {
-      console.error('Error loading data:', error);
+      logger.errorSync('Error loading data:', error);
       // Only show error notification if it's a real error, not just missing data
       if (error.message && !error.message.includes('storage API will not work')) {
         this.showNotification('Error loading saved data', 'error');
@@ -76,7 +77,7 @@ class PriceTracker {
         currentItemElement.style.display = 'none';
       }
     } catch (error) {
-      console.error('Error displaying current item:', error);
+      logger.errorSync('Error displaying current item:', error);
     }
   }
 
@@ -173,7 +174,7 @@ class PriceTracker {
         throw new Error('Failed to save data');
       }
     } catch (error) {
-      console.error('Error saving data:', error);
+      logger.errorSync('Error saving data:', error);
       this.showNotification('Error saving data. Please try again.', 'error');
       return false;
     }
@@ -236,7 +237,7 @@ class PriceTracker {
           }
         }
       } catch (error) {
-        console.error('Error handling tab update:', error);
+        logger.errorSync('Error handling tab update:', error);
       }
     });
 
@@ -247,7 +248,7 @@ class PriceTracker {
         await this.displayCurrentItem();
         await this.displayPrices();
       } catch (error) {
-        console.error('Error handling tab activation:', error);
+        logger.errorSync('Error handling tab activation:', error);
       }
     });
   }
@@ -334,7 +335,7 @@ class PriceTracker {
       trackButton.disabled = false;
 
     } catch (error) {
-      console.error('Error tracking price:', error);
+      logger.errorSync('Error tracking price:', error);
       this.showNotification('Error tracking price: ' + error.message, 'error');
 
       // Reset button
@@ -353,7 +354,7 @@ class PriceTracker {
       // Remove query parameters and fragment, normalize trailing slash
       return urlObj.origin + urlObj.pathname.replace(/\/$/, '');
     } catch (error) {
-      console.error('Error normalizing URL:', url, error);
+      logger.errorSync('Error normalizing URL:', url, error);
       return url; // Return original URL if parsing fails
     }
   }
@@ -370,12 +371,12 @@ class PriceTracker {
       
       // Check if we got valid tab data
       if (!tabs || tabs.length === 0 || !tabs[0] || !tabs[0].url) {
-        console.warn('Could not get current tab URL, keeping existing table content');
+        logger.warnSync('Could not get current tab URL, keeping existing table content');
         return; // Don't clear the table if we can't get the URL
       }
       
       const currentUrl = tabs[0].url;
-      console.log('displayPrices() called for URL:', currentUrl);
+      logger.logSync('displayPrices() called for URL:', currentUrl);
 
       // Find tracked item for the current URL using normalized URL matching
       const normalizedCurrentUrl = this.normalizeUrl(currentUrl);
@@ -442,7 +443,7 @@ class PriceTracker {
         });
       });
     } catch (error) {
-      console.error('Error displaying prices:', error);
+      logger.errorSync('Error displaying prices:', error);
       this.showNotification('Error displaying prices', 'error');
     }
   }
@@ -489,7 +490,7 @@ class PriceTracker {
    */
   async deletePrice(index) {
     // This method is kept for backward compatibility but shouldn't be used with new structure
-    console.warn('deletePrice method called - this should use deletePriceHistoryEntry instead');
+    logger.warnSync('deletePrice method called - this should use deletePriceHistoryEntry instead');
   }
 
   /**

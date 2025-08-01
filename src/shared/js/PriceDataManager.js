@@ -1,3 +1,4 @@
+// Logger dependency: Logger.js must be loaded before this script
 /**
  * Unified Price Data Manager
  * Handles all price-related data storage and retrieval operations
@@ -62,7 +63,7 @@ class PriceDataManager {
    */
   _validateTrackedPricesArray(trackedPrices) {
     if (!Array.isArray(trackedPrices)) {
-      console.warn('Invalid tracked prices: expected array, got', typeof trackedPrices);
+      logger.warnSync('Invalid tracked prices: expected array, got', typeof trackedPrices);
       return [];
     }
 
@@ -70,7 +71,7 @@ class PriceDataManager {
       try {
         return this._validateTrackedPriceItem(item);
       } catch (error) {
-        console.error('Skipping invalid tracked price item:', error.message, item);
+        logger.errorSync('Skipping invalid tracked price item:', error.message, item);
         return null;
       }
     }).filter(item => item !== null);
@@ -125,7 +126,7 @@ class PriceDataManager {
       const rawData = result[this.storageKeys.TRACKED_PRICES] || [];
       return this._validateTrackedPricesArray(rawData);
     } catch (error) {
-      console.error('Error getting tracked prices:', error);
+      logger.errorSync('Error getting tracked prices:', error);
       return [];
     }
   }
@@ -141,7 +142,7 @@ class PriceDataManager {
       await browser.storage.local.set({ [this.storageKeys.TRACKED_PRICES]: validatedData });
       return true;
     } catch (error) {
-      console.error('Error saving tracked prices:', error);
+      logger.errorSync('Error saving tracked prices:', error);
       return false;
     }
   }
@@ -155,7 +156,7 @@ class PriceDataManager {
       const result = await browser.storage.local.get([this.storageKeys.TRACKED_ITEMS]);
       return result[this.storageKeys.TRACKED_ITEMS] || {};
     } catch (error) {
-      console.error('Error getting tracked items:', error);
+      logger.errorSync('Error getting tracked items:', error);
       return {};
     }
   }
@@ -170,7 +171,7 @@ class PriceDataManager {
       await browser.storage.local.set({ [this.storageKeys.TRACKED_ITEMS]: trackedItems });
       return true;
     } catch (error) {
-      console.error('Error saving tracked items:', error);
+      logger.errorSync('Error saving tracked items:', error);
       return false;
     }
   }
@@ -190,7 +191,7 @@ class PriceDataManager {
         trackedItems: result[this.storageKeys.TRACKED_ITEMS] || {}
       };
     } catch (error) {
-      console.error('Error getting all tracked data:', error);
+      logger.errorSync('Error getting all tracked data:', error);
       return {
         trackedPrices: [],
         trackedItems: {}
@@ -213,7 +214,7 @@ class PriceDataManager {
       });
       return true;
     } catch (error) {
-      console.error('Error saving all tracked data:', error);
+      logger.errorSync('Error saving all tracked data:', error);
       return false;
     }
   }
@@ -253,7 +254,7 @@ class PriceDataManager {
       
       return trackedItem;
     } catch (error) {
-      console.error('Error finding/creating tracked item:', error);
+      logger.errorSync('Error finding/creating tracked item:', error);
       return null;
     }
   }
@@ -300,7 +301,7 @@ class PriceDataManager {
       await this.saveTrackedPrices(trackedPrices);
       return true;
     } catch (error) {
-      console.error('Error adding price to history:', error);
+      logger.errorSync('Error adding price to history:', error);
       return false;
     }
   }
@@ -314,7 +315,7 @@ class PriceDataManager {
       const result = await browser.storage.local.get([this.storageKeys.PRICE_DROP_HISTORY]);
       return result[this.storageKeys.PRICE_DROP_HISTORY] || [];
     } catch (error) {
-      console.error('Error getting price drop history:', error);
+      logger.errorSync('Error getting price drop history:', error);
       return [];
     }
   }
@@ -329,7 +330,7 @@ class PriceDataManager {
       await browser.storage.local.set({ [this.storageKeys.PRICE_DROP_HISTORY]: history });
       return true;
     } catch (error) {
-      console.error('Error saving price drop history:', error);
+      logger.errorSync('Error saving price drop history:', error);
       return false;
     }
   }
@@ -365,7 +366,7 @@ class PriceDataManager {
       await this.savePriceDropHistory(history);
       return true;
     } catch (error) {
-      console.error('Error adding notification to history:', error);
+      logger.errorSync('Error adding notification to history:', error);
       return false;
     }
   }
@@ -379,7 +380,7 @@ class PriceDataManager {
       const result = await browser.storage.local.get([this.storageKeys.LAST_NOTIFICATION_URL]);
       return result[this.storageKeys.LAST_NOTIFICATION_URL] || null;
     } catch (error) {
-      console.error('Error getting last notification URL:', error);
+      logger.errorSync('Error getting last notification URL:', error);
       return null;
     }
   }
@@ -394,7 +395,7 @@ class PriceDataManager {
       await browser.storage.local.set({ [this.storageKeys.LAST_NOTIFICATION_URL]: url });
       return true;
     } catch (error) {
-      console.error('Error saving last notification URL:', error);
+      logger.errorSync('Error saving last notification URL:', error);
       return false;
     }
   }
@@ -408,7 +409,7 @@ class PriceDataManager {
       const result = await browser.storage.local.get([this.storageKeys.API_KEY]);
       return result[this.storageKeys.API_KEY] || null;
     } catch (error) {
-      console.error('Error getting API key:', error);
+      logger.errorSync('Error getting API key:', error);
       return null;
     }
   }
@@ -422,7 +423,7 @@ class PriceDataManager {
       const result = await browser.storage.local.get([this.storageKeys.PRICE_ALARM_ENABLED]);
       return result[this.storageKeys.PRICE_ALARM_ENABLED] || false;
     } catch (error) {
-      console.error('Error getting price alarm enabled status:', error);
+      logger.errorSync('Error getting price alarm enabled status:', error);
       return false;
     }
   }
@@ -436,7 +437,7 @@ class PriceDataManager {
       const result = await browser.storage.local.get([this.storageKeys.VIEW_MODE]);
       return result[this.storageKeys.VIEW_MODE] || 'popup';
     } catch (error) {
-      console.error('Error getting view mode:', error);
+      logger.errorSync('Error getting view mode:', error);
       return 'popup';
     }
   }
@@ -459,7 +460,7 @@ class PriceDataManager {
       await this.saveAllTrackedData(data.trackedPrices, data.trackedItems);
       return true;
     } catch (error) {
-      console.error('Error removing tracked item:', error);
+      logger.errorSync('Error removing tracked item:', error);
       return false;
     }
   }

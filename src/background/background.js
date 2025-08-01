@@ -17,7 +17,7 @@ async function setViewMode(viewMode) {
       await browser.browserAction.setPopup({ popup: 'popup/popup.html' });
     }
   } catch (error) {
-    console.error('Error setting view mode:', error);
+    logger.errorSync('Error setting view mode:', error);
   }
 }
 
@@ -28,7 +28,7 @@ async function initializeViewMode() {
     const viewMode = await getViewMode();
     await setViewMode(viewMode);
   } catch (error) {
-    console.error('Error initializing view mode:', error);
+    logger.errorSync('Error initializing view mode:', error);
     // Default to popup mode
     await setViewMode('popup');
   }
@@ -37,16 +37,16 @@ async function initializeViewMode() {
 // Listen for extension icon clicks (only called when the popup is disabled)
 browser.browserAction.onClicked.addListener((tab, info) => {
   // Call open() first while still in the user input handler context
-  browser.sidebarAction.open().catch(console.error);
+  browser.sidebarAction.open().catch(error => logger.errorSync('Error opening sidebar:', error));
 
   // Then set the panel (this can be async)
-  browser.sidebarAction.setPanel({ panel: 'sidebar/sidebar.html' }).catch(console.error);
+  browser.sidebarAction.setPanel({ panel: 'sidebar/sidebar.html' }).catch(error => logger.errorSync('Error setting sidebar panel:', error));
 });
 
 // Listen for storage changes to update view mode and price alarm settings
 browser.storage.onChanged.addListener(async (changes, areaName) => {
   if (areaName === 'local' || areaName === 'sync') {
-    console.log(`Storage changes detected in ${areaName} storage:`, changes);
+    await logger.log(`Storage changes detected in ${areaName} storage:`, changes);
     
     // Handle view mode changes
     if (changes.viewMode) {
@@ -61,8 +61,8 @@ browser.storage.onChanged.addListener(async (changes, areaName) => {
         // Create the alarm if it was enabled
         browser.alarms.create(PRICE_CHECK_ALARM_NAME, {
           periodInMinutes: 60 // Check once per hour
-        }).catch(error => console.error('Error creating alarm:', error));
-        console.log('Price tracking alarm enabled via settings change');
+        }).catch(error => logger.errorSync('Error creating alarm:', error));
+        await logger.log('Price tracking alarm enabled via settings change');
         
         // Trigger immediate check for all tracked items when price tracking is enabled
         // This ensures items tracked before enabling price tracking are checked
@@ -70,7 +70,7 @@ browser.storage.onChanged.addListener(async (changes, areaName) => {
       } else {
         // Clear the alarm if it was disabled
         await browser.alarms.clear(PRICE_CHECK_ALARM_NAME);
-        console.log('Price tracking alarm disabled via settings change');
+        await logger.log('Price tracking alarm disabled via settings change');
       }
     }
   }
@@ -85,7 +85,7 @@ browser.runtime.onInstalled.addListener((details) => {
   
   // When the extension is refreshed/updated, check all tracked items immediately
   if (details.reason === 'update' || details.reason === 'install') {
-    console.log('Extension was refreshed/updated, checking all tracked items immediately');
+    logger.logSync('Extension was refreshed/updated, checking all tracked items immediately');
     setTimeout(() => checkAllTrackedItemsOnRefresh(), 3000);
   }
 });
@@ -124,12 +124,12 @@ async function trackPrice(url, apiKey) {
       // Try to get content from active tab, passing the target URL to ensure we're on the right page
       pageContent = await getPageContent(url);
     } catch (contentError) {
-      console.log('Could not get content from active tab, trying to fetch directly:', contentError.message);
+      await logger.log('Could not get content from active tab, trying to fetch directly:', contentError.message);
       // If we can't get content from active tab, try to fetch it directly
       try {
         pageContent = await fetchPageContentDirectly(url);
       } catch (fetchError) {
-        console.log('Could not fetch content directly, using fallback:', fetchError.message);
+        await logger.log('Could not fetch content directly, using fallback:', fetchError.message);
         // If direct fetch fails, use a minimal pageContent with just the URL
         pageContent = {
           title: 'Product Page',
@@ -141,7 +141,7 @@ async function trackPrice(url, apiKey) {
 
     // Ensure pageContent is defined before proceeding
     if (!pageContent) {
-      console.log('pageContent is still undefined after all attempts, creating default object');
+      await logger.log('pageContent is still undefined after all attempts, creating default object');
       pageContent = {
         title: 'Product Page',
         bodyContent: 'Product information not available',
@@ -152,7 +152,7 @@ async function trackPrice(url, apiKey) {
     // Extract information using OpenAI API
     return await extractDataWithOpenAI(url, apiKey, pageContent);
   } catch (error) {
-    console.error('Error in trackPrice:', error);
+    await logger.error('Error in trackPrice:', error);
     throw new Error('Failed to track price: ' + error.message);
   }
 }
@@ -187,13 +187,13 @@ async function getPageContent(targetUrl = null) {
     // If a target URL was provided but the content URL doesn't match,
     // this means we're on a different page than the product we want to track
     if (targetUrl && pageContent.url !== targetUrl) {
-      console.log('Current page URL does not match target product URL, fetching directly instead');
+      await logger.log('Current page URL does not match target product URL, fetching directly instead');
       throw new Error('Page URL mismatch');
     }
 
     return pageContent;
   } catch (error) {
-    console.error('Error getting page content:', error);
+    await logger.error('Error getting page content:', error);
     throw new Error('Could not access page content. Make sure you are on a product page.');
   }
 }
@@ -203,7 +203,7 @@ async function extractDataWithOpenAI(url, apiKey, pageContent) {
   try {
     // Validate pageContent and its properties
     if (!pageContent) {
-      console.log('Page content is undefined, creating default pageContent object');
+      logger.logSync('Page content is undefined, creating default pageContent object');
       pageContent = {
         title: 'Product Page',
         bodyContent: 'Product information not available',
@@ -274,7 +274,7 @@ async function extractDataWithOpenAI(url, apiKey, pageContent) {
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('OpenAI API error:', errorData);
+      logger.errorSync('OpenAI API error:', errorData);
       throw new Error(
         `OpenAI API error: ${errorData.error?.message || 'Unknown error'}`);
     }
@@ -283,7 +283,7 @@ async function extractDataWithOpenAI(url, apiKey, pageContent) {
 
     // Check if the response has the expected structure
     if (!data.output || !Array.isArray(data.output)) {
-      console.error('Unexpected API response format:', data);
+      logger.errorSync('Unexpected API response format:', data);
       throw new Error('Invalid response format from OpenAI API');
     }
 
@@ -291,7 +291,7 @@ async function extractDataWithOpenAI(url, apiKey, pageContent) {
     const messageOutput = data.output.find(item => item.type === 'message');
     if (!messageOutput || !messageOutput.content ||
       !messageOutput.content.length) {
-      console.error('No message output found in response:', data);
+      logger.errorSync('No message output found in response:', data);
       throw new Error('Invalid response format from OpenAI API');
     }
 
@@ -299,7 +299,7 @@ async function extractDataWithOpenAI(url, apiKey, pageContent) {
     const textContent = messageOutput.content.find(
       item => item.type === 'output_text');
     if (!textContent || !textContent.text) {
-      console.error('No text content found in message:', messageOutput);
+      logger.errorSync('No text content found in message:', messageOutput);
       throw new Error('No text content found in the API response');
     }
 
@@ -313,12 +313,12 @@ async function extractDataWithOpenAI(url, apiKey, pageContent) {
 
       return extractedData;
     } catch (jsonError) {
-      console.error('Error parsing JSON:', jsonError);
+      logger.errorSync('Error parsing JSON:', jsonError);
       throw new Error(
         'Failed to parse JSON from the API response: ' + jsonError.message);
     }
   } catch (error) {
-    console.error('Error extracting data with OpenAI:', error);
+    logger.errorSync('Error extracting data with OpenAI:', error);
     throw new Error('Failed to extract data: ' + error.message);
   }
 }
@@ -373,12 +373,12 @@ async function initializePriceTracking() {
   try {
     // Check if price alarm is enabled and get tracked prices from local storage
     const result = await browser.storage.local.get(['priceAlarmEnabled', 'trackedPrices']);
-    console.log('Successfully retrieved data from local storage');
+    logger.logSync('Successfully retrieved data from local storage');
     
     const priceAlarmEnabled = result.priceAlarmEnabled === true;
     let trackedPrices = result.trackedPrices || [];
     
-    console.log('Storage data retrieved:', {
+    logger.logSync('Storage data retrieved:', {
       priceAlarmEnabled,
       trackedPricesCount: trackedPrices.length
     });
@@ -401,8 +401,8 @@ async function initializePriceTracking() {
     const urlsNeedingCheck = getUrlsNeedingCheck(trackedPrices, 1);
     
     if (urlsNeedingCheck.length > 0) {
-      console.log(`Found ${urlsNeedingCheck.length} products that need checking:`, urlsNeedingCheck);
-      console.log('Some products need to be checked (never checked or not checked in over an hour), performing immediate check');
+      logger.logSync(`Found ${urlsNeedingCheck.length} products that need checking:`, urlsNeedingCheck);
+      logger.logSync('Some products need to be checked (never checked or not checked in over an hour), performing immediate check');
       // Use setTimeout to allow the extension to fully initialize first
       setTimeout(() => checkItemsOnStartup(trackedPrices), 5000);
     }
@@ -411,20 +411,20 @@ async function initializePriceTracking() {
     if (priceAlarmEnabled) {
       browser.alarms.create(PRICE_CHECK_ALARM_NAME, {
         periodInMinutes: 60 // Check once per hour
-      }).catch(error => console.error('Error creating price check alarm:', error));
-      console.log('Price tracking alarm created - automatic checking enabled');
+      }).catch(error => logger.errorSync('Error creating price check alarm:', error));
+      logger.logSync('Price tracking alarm created - automatic checking enabled');
     } else {
       // Make sure alarm is cleared if disabled
       await browser.alarms.clear(PRICE_CHECK_ALARM_NAME);
-      console.log('Price tracking alarm disabled - automatic checking disabled');
+      logger.logSync('Price tracking alarm disabled - automatic checking disabled');
     }
     
     // Listen for alarm events
     browser.alarms.onAlarm.addListener(handleAlarm);
     
-    console.log('Price tracking system initialized');
+    logger.logSync('Price tracking system initialized');
   } catch (error) {
-    console.error('Error initializing price tracking:', error);
+    logger.errorSync('Error initializing price tracking:', error);
   }
 }
 
@@ -440,7 +440,7 @@ async function setupPriceTracking(url, initialPrice) {
   try {
     // Get currently tracked prices from local storage
     const result = await browser.storage.local.get('trackedPrices');
-    console.log('Successfully retrieved tracked prices from local storage');
+    logger.logSync('Successfully retrieved tracked prices from local storage');
     
     const trackedPrices = result.trackedPrices || [];
     
@@ -455,49 +455,49 @@ async function setupPriceTracking(url, initialPrice) {
       newTrackedItem.history.push(initialHistoryEntry);
       
       trackedPrices.push(newTrackedItem);
-      console.log(`Added new price tracking entry for ${url} with initial price ${initialPrice}`);
+      logger.logSync(`Added new price tracking entry for ${url} with initial price ${initialPrice}`);
     } else {
-      console.log(`Price tracking already exists for ${url}`);
+      logger.logSync(`Price tracking already exists for ${url}`);
     }
     
     // Save using data manager
     await dataManager.saveTrackedPrices(trackedPrices);
-    console.log(`Price tracking set up for ${url} with initial price ${initialPrice} (saved using data manager)`);
+    logger.logSync(`Price tracking set up for ${url} with initial price ${initialPrice} (saved using data manager)`);
     
     // Make sure the alarm is set up
     const alarms = await browser.alarms.getAll();
     if (!alarms.some(a => a.name === PRICE_CHECK_ALARM_NAME)) {
       browser.alarms.create(PRICE_CHECK_ALARM_NAME, {
         periodInMinutes: 60 // Check once per hour
-      }).catch(error => console.error('Error creating price check alarm:', error));
-      console.log('Price check alarm created');
+      }).catch(error => logger.errorSync('Error creating price check alarm:', error));
+      logger.logSync('Price check alarm created');
     }
   } catch (error) {
-    console.error('Error setting up price tracking:', error);
+    logger.errorSync('Error setting up price tracking:', error);
   }
 }
 
 // Check prices for all tracked URLs
 async function checkAllPrices() {
   try {
-    console.log('Checking prices for all tracked items...');
+    logger.logSync('Checking prices for all tracked items...');
     
     // Get tracked prices from data manager and settings from local storage
     const trackedPrices = await dataManager.getTrackedPrices();
     const result = await browser.storage.local.get(['priceAlarmEnabled', 'apiKey']);
-    console.log('Successfully retrieved price tracking data from data manager and settings from local storage');
+    logger.logSync('Successfully retrieved price tracking data from data manager and settings from local storage');
     
     const apiKey = result.apiKey;
     const priceAlarmEnabled = result.priceAlarmEnabled === true;
     
     // Check if price alarm is enabled
     if (!priceAlarmEnabled) {
-      console.log('Price alarm is disabled, skipping price checks');
+      logger.logSync('Price alarm is disabled, skipping price checks');
       return;
     }
     
     if (!apiKey) {
-      console.warn('No API key found, cannot check prices');
+      logger.warnSync('No API key found, cannot check prices');
       return;
     }
     
@@ -507,7 +507,7 @@ async function checkAllPrices() {
     // Check each URL
     for (const [url, latestEntry] of Object.entries(latestPrices)) {
       try {
-        console.log(`Checking price for ${url}`);
+        logger.logSync(`Checking price for ${url}`);
         
         // Fetch page content directly for background checks
         let pageContent = await fetchPageContentDirectly(url);
@@ -517,7 +517,7 @@ async function checkAllPrices() {
         
         // Validate the returned data
         if (!currentData || !currentData.price) {
-          console.error(`Invalid data returned for ${url}:`, currentData);
+          logger.errorSync(`Invalid data returned for ${url}:`, currentData);
           continue; // Skip to the next URL
         }
         
@@ -529,7 +529,7 @@ async function checkAllPrices() {
         
         // Compare prices
         if (isPriceLower(currentPrice, oldPrice)) {
-          console.log(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
+          logger.logSync(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
           
           // Send notification
           await sendPriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
@@ -537,13 +537,13 @@ async function checkAllPrices() {
           // Store notification in history
           await storePriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
         } else {
-          console.log(`No price drop for ${url}, old: ${oldPrice}, current: ${currentPrice}`);
+          logger.logSync(`No price drop for ${url}, old: ${oldPrice}, current: ${currentPrice}`);
         }
       } catch (error) {
-        console.error(`Error checking price for ${url}:`, error);
+        logger.errorSync(`Error checking price for ${url}:`, error);
         // If it's a 503 error, skip price tracking for this item
         if (error.message && error.message.includes('503_SERVICE_UNAVAILABLE')) {
-          console.log(`Skipping price tracking for ${url} due to 503 Service Unavailable error`);
+          logger.logSync(`Skipping price tracking for ${url} due to 503 Service Unavailable error`);
           continue; // Skip to the next URL without updating lastChecked
         }
       }
@@ -553,7 +553,7 @@ async function checkAllPrices() {
     await dataManager.saveTrackedPrices(trackedPrices);
     
   } catch (error) {
-    console.error('Error checking prices:', error);
+    logger.errorSync('Error checking prices:', error);
   }
 }
 
@@ -572,7 +572,7 @@ function isPriceLower(currentPrice, oldPrice) {
   const currentNumeric = extractNumeric(currentPrice);
   const oldNumeric = extractNumeric(oldPrice);
   
-  console.log(`Comparing prices: ${oldNumeric} (old) vs ${currentNumeric} (current)`);
+  logger.logSync(`Comparing prices: ${oldNumeric} (old) vs ${currentNumeric} (current)`);
   
   // Return true if current price is lower
   return currentNumeric < oldNumeric;
@@ -598,7 +598,7 @@ async function sendPriceDropNotification(url, productName, oldPrice, newPrice) {
     await browser.storage.local.set({ 'lastNotificationUrl': url });
     
   } catch (error) {
-    console.error('Error sending notification:', error);
+    logger.errorSync('Error sending notification:', error);
   }
 }
 
@@ -608,7 +608,7 @@ function handleNotificationClick(notificationId) {
     if (result.lastNotificationUrl) {
       browser.tabs.create({ url: result.lastNotificationUrl });
     }
-  }).catch(console.error);
+  }).catch(error => logger.errorSync("Error:", error));
 }
 
 // Store price drop notification in history
@@ -636,7 +636,7 @@ async function storePriceDropNotification(url, productName, oldPrice, newPrice) 
     await browser.storage.local.set({ 'priceDropHistory': history });
     
   } catch (error) {
-    console.error('Error storing notification history:', error);
+    logger.errorSync('Error storing notification history:', error);
   }
 }
 
@@ -646,62 +646,62 @@ async function storePriceInTrackedHistory(trackedPrices, url, productName, price
     // Use data manager to add price to history
     await dataManager.addPriceToHistory(url, productName, price, imageUrl);
   } catch (error) {
-    console.error('Error storing price in tracked history:', error);
+    logger.errorSync('Error storing price in tracked history:', error);
   }
 }
 
 // Function to check all tracked items when price tracking is enabled
 async function checkTrackedItemsOnEnable() {
   try {
-    console.log('Checking all tracked items after enabling price tracking...');
+    logger.logSync('Checking all tracked items after enabling price tracking...');
     
     // Get tracked prices from data manager
     const trackedPrices = await dataManager.getTrackedPrices();
-    console.log('Successfully retrieved tracked items from data manager for checking after enable');
+    logger.logSync('Successfully retrieved tracked items from data manager for checking after enable');
     
     if (trackedPrices.length === 0) {
-      console.log('No tracked items found to check');
+      logger.logSync('No tracked items found to check');
       return;
     }
     
     // Get unique URLs from the array
     const uniqueUrls = [...new Set(trackedPrices.map(entry => entry.url))];
-    console.log(`Found ${uniqueUrls.length} unique tracked items to check after enabling price tracking`);
+    logger.logSync(`Found ${uniqueUrls.length} unique tracked items to check after enabling price tracking`);
     
     // Mark all items for immediate checking by calling checkAllPrices
     setTimeout(() => checkAllPrices(), 3000);
   } catch (error) {
-    console.error('Error checking tracked items on enable:', error);
+    logger.errorSync('Error checking tracked items on enable:', error);
   }
 }
 
 // Function to check all tracked items when the extension is refreshed
 async function checkAllTrackedItemsOnRefresh() {
   try {
-    console.log('Checking all tracked items after extension refresh...');
+    logger.logSync('Checking all tracked items after extension refresh...');
     
     // Get tracked data from data manager
     const data = await dataManager.getAllTrackedData();
-    console.log('Successfully retrieved tracked items from data manager for refresh check');
+    logger.logSync('Successfully retrieved tracked items from data manager for refresh check');
     
     // Extract data from result
     let trackedPrices = data.trackedPrices || [];
     const oldTrackedItems = data.trackedItems || {};
     
-    console.log(`Storage check - trackedPrices: ${trackedPrices.length} items, trackedItems: ${Object.keys(oldTrackedItems).length} items`);
+    logger.logSync(`Storage check - trackedPrices: ${trackedPrices.length} items, trackedItems: ${Object.keys(oldTrackedItems).length} items`);
     
     // Log the actual content for debugging
-    console.log('trackedPrices content:', trackedPrices);
-    console.log('trackedItems content:', oldTrackedItems);
+    logger.logSync('trackedPrices content:', trackedPrices);
+    logger.logSync('trackedItems content:', oldTrackedItems);
     
     // If we have no items in the main storage but have items in the old storage,
     // migrate them first
     if (trackedPrices.length === 0 && Object.keys(oldTrackedItems).length > 0) {
-      console.log('Found older tracked items during refresh, migrating to unified format');
+      logger.logSync('Found older tracked items during refresh, migrating to unified format');
       
       // Process items from oldTrackedItems
       for (const [url, item] of Object.entries(oldTrackedItems)) {
-        console.log(`Migrating old tracked item for ${url} without price data`);
+        logger.logSync(`Migrating old tracked item for ${url} without price data`);
         // Create tracked item using data manager structure control
         const migratedItem = dataManager.createTrackedPriceItem(
           url, 
@@ -718,38 +718,38 @@ async function checkAllTrackedItemsOnRefresh() {
       // Save the updated trackedPrices using data manager
       await dataManager.saveTrackedPrices(trackedPrices);
       
-      console.log('Migration complete during refresh, all old items saved to unified storage');
+      logger.logSync('Migration complete during refresh, all old items saved to unified storage');
     }
     
     if (trackedPrices.length === 0) {
-      console.log('No tracked items found to check after refresh (checked all storage locations)');
+      logger.logSync('No tracked items found to check after refresh (checked all storage locations)');
       return;
     }
     
     // Get unique URLs for counting
     const uniqueUrls = [...new Set(trackedPrices.map(entry => entry.url))];
-    console.log(`Found ${uniqueUrls.length} unique tracked items to check after extension refresh`);
+    logger.logSync(`Found ${uniqueUrls.length} unique tracked items to check after extension refresh`);
     
     // Check all items regardless of when they were last checked
     await checkItemsOnStartup(trackedPrices);
   } catch (error) {
-    console.error('Error checking tracked items on extension refresh:', error);
+    logger.errorSync('Error checking tracked items on extension refresh:', error);
   }
 }
 
 // Function to check items on startup, regardless of price tracking status
 async function checkItemsOnStartup(trackedPrices) {
   try {
-    console.log('Checking items on startup, regardless of price tracking status...');
+    logger.logSync('Checking items on startup, regardless of price tracking status...');
     
     // Get API key from local storage
     const result = await browser.storage.local.get(['apiKey']);
-    console.log('Successfully retrieved API key from local storage for startup check');
+    logger.logSync('Successfully retrieved API key from local storage for startup check');
 
     const apiKey = result.apiKey;
     
     if (!apiKey) {
-      console.warn('No API key found, cannot check prices on startup');
+      logger.warnSync('No API key found, cannot check prices on startup');
       return;
     }
     
@@ -759,7 +759,7 @@ async function checkItemsOnStartup(trackedPrices) {
     // Check each URL
     for (const [url, latestEntry] of Object.entries(latestPrices)) {
       try {
-        console.log(`Checking price for ${url} on startup`);
+        logger.logSync(`Checking price for ${url} on startup`);
         
         // Fetch page content directly for background checks
         let pageContent = await fetchPageContentDirectly(url);
@@ -769,7 +769,7 @@ async function checkItemsOnStartup(trackedPrices) {
         
         // Validate the returned data
         if (!currentData || !currentData.price) {
-          console.error(`Invalid data returned for ${url}:`, currentData);
+          logger.errorSync(`Invalid data returned for ${url}:`, currentData);
           continue; // Skip to the next URL
         }
         
@@ -781,7 +781,7 @@ async function checkItemsOnStartup(trackedPrices) {
         
         // Compare prices
         if (isPriceLower(currentPrice, oldPrice)) {
-          console.log(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
+          logger.logSync(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
           
           // Send notification
           await sendPriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
@@ -789,13 +789,13 @@ async function checkItemsOnStartup(trackedPrices) {
           // Store notification in history
           await storePriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
         } else {
-          console.log(`No price drop for ${url}, old: ${oldPrice}, current: ${currentPrice}`);
+          logger.logSync(`No price drop for ${url}, old: ${oldPrice}, current: ${currentPrice}`);
         }
       } catch (error) {
-        console.error(`Error checking price for ${url} on startup:`, error);
+        logger.errorSync(`Error checking price for ${url} on startup:`, error);
         // If it's a 503 error, skip price tracking for this item
         if (error.message && error.message.includes('503_SERVICE_UNAVAILABLE')) {
-          console.log(`Skipping price tracking for ${url} due to 503 Service Unavailable error`);
+          logger.logSync(`Skipping price tracking for ${url} due to 503 Service Unavailable error`);
           continue; // Skip to the next URL without updating lastChecked
         }
       }
@@ -803,17 +803,17 @@ async function checkItemsOnStartup(trackedPrices) {
     
     // Save updated tracking data using data manager
     await dataManager.saveTrackedPrices(trackedPrices);
-    console.log('Updated tracking data saved using data manager after startup check');
+    logger.logSync('Updated tracking data saved using data manager after startup check');
     
   } catch (error) {
-    console.error('Error checking prices on startup:', error);
+    logger.errorSync('Error checking prices on startup:', error);
   }
 }
 
 // Function to fetch page content directly for background checks
 async function fetchPageContentDirectly(url) {
   try {
-    console.log(`Fetching page content directly for ${url}`);
+    logger.logSync(`Fetching page content directly for ${url}`);
     
     // Fetch the page content
     const response = await fetch(url);
@@ -853,7 +853,7 @@ async function fetchPageContentDirectly(url) {
       url: url
     };
   } catch (error) {
-    console.error(`Error fetching page content for ${url}:`, error);
+    logger.errorSync(`Error fetching page content for ${url}:`, error);
     // If it's a 503 error, re-throw it so calling functions can handle it
     if (error.message && error.message.includes('503_SERVICE_UNAVAILABLE')) {
       throw error;

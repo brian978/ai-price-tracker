@@ -1,3 +1,4 @@
+// Logger dependency: Logger.js must be loaded before this script
 // Save the API key to storage
 function saveOptions() {
   const apiKey = document.getElementById('api-key').value.trim();
@@ -18,7 +19,7 @@ function saveOptions() {
       showStatusMessage('API key saved successfully!', 'success');
     })
     .catch(error => {
-      console.error('Error saving API key:', error);
+      logger.errorSync('Error saving API key:', error);
       showStatusMessage('Error saving API key. Please try again.', 'error');
     });
 }
@@ -48,7 +49,7 @@ function loadOptions() {
       priceAlarmCheckbox.checked = syncResult.priceAlarmEnabled === true;
     })
     .catch(error => {
-      console.error('Error loading options:', error);
+      logger.errorSync('Error loading options:', error);
     });
 }
 
@@ -61,7 +62,7 @@ function saveViewMode() {
       showViewStatusMessage('View mode saved successfully! Please reload the extension to apply changes.', 'success');
     })
     .catch(error => {
-      console.error('Error saving view mode:', error);
+      logger.errorSync('Error saving view mode:', error);
       showViewStatusMessage('Error saving view mode. Please try again.', 'error');
     });
 }
@@ -115,7 +116,7 @@ function savePriceAlarmSetting() {
       showAlarmStatusMessage(`Price alarm ${priceAlarmEnabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     })
     .catch(error => {
-      console.error('Error saving price alarm setting:', error);
+      logger.errorSync('Error saving price alarm setting:', error);
       showAlarmStatusMessage('Error saving price alarm setting. Please try again.', 'error');
     });
 }
@@ -177,7 +178,7 @@ function clearPriceHistory() {
         }
       })
       .catch(error => {
-        console.error('Error clearing price check history:', error);
+        logger.errorSync('Error clearing price check history:', error);
         showClearStatusMessage('Error clearing price check history. Please try again.', 'error');
       });
   }
@@ -198,7 +199,7 @@ function clearPriceDropHistory() {
       showClearStatusMessage('Tracked prices for alarm cleared successfully!', 'success');
     })
     .catch(error => {
-      console.error('Error clearing tracked prices for alarm:', error);
+      logger.errorSync('Error clearing tracked prices for alarm:', error);
       showClearStatusMessage('Error clearing tracked prices for alarm. Please try again.', 'error');
     });
   }
@@ -251,7 +252,7 @@ function loadPriceHistory() {
       displayPriceHistory(history);
     })
     .catch(error => {
-      console.error('Error loading price history:', error);
+      logger.errorSync('Error loading price history:', error);
     });
 }
 
@@ -306,7 +307,7 @@ function loadPriceDropHistory() {
       displayPriceDropHistory(history);
     })
     .catch(error => {
-      console.error('Error loading price drop history:', error);
+      logger.errorSync('Error loading price drop history:', error);
     });
 }
 
