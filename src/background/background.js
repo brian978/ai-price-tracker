@@ -1,3 +1,6 @@
+// Create global instance of PriceDataManager
+const dataManager = new PriceDataManager();
+
 async function getViewMode() {
   const result = await browser.storage.local.get('viewMode');
   return result.viewMode || 'popup';
@@ -387,8 +390,8 @@ async function initializePriceTracking() {
       }
     }
     
-    // Save the updated trackedPrices to local storage
-    await browser.storage.local.set({ trackedPrices: trackedPrices });
+    // Save the updated trackedPrices using data manager
+    await dataManager.saveTrackedPrices(trackedPrices);
     
     // BROWSER RESTART HANDLING:
     // Since browser alarms don't run when the browser is closed, we need to check
@@ -445,25 +448,21 @@ async function setupPriceTracking(url, initialPrice) {
     const existingEntries = trackedPrices.filter(entry => entry.url === url);
     
     if (existingEntries.length === 0) {
-      // No existing entries, create a new one
-      // Note: This function is called from the trackPrice flow, so we should have item info
-      // For now, we'll create a basic entry and let the main tracking flow fill in details
-      trackedPrices.push({
-        date: new Date().toISOString().split('T')[0],
-        name: 'Product', // This will be updated by the main tracking flow
-        price: initialPrice,
-        url: url,
-        imageUrl: '',
-        lastChecked: new Date().toISOString()
-      });
+      // No existing entries, create a new one using data manager structure control
+      const newTrackedItem = dataManager.createTrackedPriceItem(url, 'Product', '');
+      // Add initial price to history
+      const initialHistoryEntry = dataManager.createPriceHistoryEntry(initialPrice);
+      newTrackedItem.history.push(initialHistoryEntry);
+      
+      trackedPrices.push(newTrackedItem);
       console.log(`Added new price tracking entry for ${url} with initial price ${initialPrice}`);
     } else {
       console.log(`Price tracking already exists for ${url}`);
     }
     
-    // Save to local storage
-    await browser.storage.local.set({ trackedPrices: trackedPrices });
-    console.log(`Price tracking set up for ${url} with initial price ${initialPrice} (saved to local storage)`);
+    // Save using data manager
+    await dataManager.saveTrackedPrices(trackedPrices);
+    console.log(`Price tracking set up for ${url} with initial price ${initialPrice} (saved using data manager)`);
     
     // Make sure the alarm is set up
     const alarms = await browser.alarms.getAll();
@@ -483,11 +482,11 @@ async function checkAllPrices() {
   try {
     console.log('Checking prices for all tracked items...');
     
-    // Get tracked prices and settings from local storage
-    const result = await browser.storage.local.get(['trackedPrices', 'priceAlarmEnabled', 'apiKey']);
-    console.log('Successfully retrieved price tracking data from local storage');
+    // Get tracked prices from data manager and settings from local storage
+    const trackedPrices = await dataManager.getTrackedPrices();
+    const result = await browser.storage.local.get(['priceAlarmEnabled', 'apiKey']);
+    console.log('Successfully retrieved price tracking data from data manager and settings from local storage');
     
-    const trackedPrices = result.trackedPrices || [];
     const apiKey = result.apiKey;
     const priceAlarmEnabled = result.priceAlarmEnabled === true;
     
@@ -550,8 +549,8 @@ async function checkAllPrices() {
       }
     }
     
-    // Save updated tracking data to local storage
-    await browser.storage.local.set({ trackedPrices: trackedPrices });
+    // Save updated tracking data using data manager
+    await dataManager.saveTrackedPrices(trackedPrices);
     
   } catch (error) {
     console.error('Error checking prices:', error);
@@ -644,44 +643,8 @@ async function storePriceDropNotification(url, productName, oldPrice, newPrice) 
 // Store price check in trackedPrices history (only if price is different)
 async function storePriceInTrackedHistory(trackedPrices, url, productName, price, imageUrl = '') {
   try {
-    // Find existing tracked item for this URL
-    let trackedItem = trackedPrices.find(item => item.url === url);
-    
-    if (!trackedItem) {
-      // Create new tracked item
-      trackedItem = {
-        url: url,
-        name: productName,
-        imageUrl: imageUrl,
-        lastChecked: new Date().toISOString(),
-        history: []
-      };
-      trackedPrices.push(trackedItem);
-    } else {
-      // Update existing item
-      trackedItem.name = productName || trackedItem.name;
-      trackedItem.lastChecked = new Date().toISOString();
-      if (imageUrl) {
-        trackedItem.imageUrl = imageUrl;
-      }
-    }
-    
-    // Check if price is different from the last recorded price
-    const lastHistoryEntry = trackedItem.history[trackedItem.history.length - 1];
-    if (!lastHistoryEntry || lastHistoryEntry.price !== price) {
-      // Add new price to history
-      trackedItem.history.push({
-        price: price,
-        date: new Date().toISOString().split('T')[0],
-        timestamp: new Date().toISOString()
-      });
-      
-      // Keep only the most recent 50 price entries per item
-      if (trackedItem.history.length > 50) {
-        trackedItem.history.shift(); // Remove oldest entry
-      }
-    }
-    
+    // Use data manager to add price to history
+    await dataManager.addPriceToHistory(url, productName, price, imageUrl);
   } catch (error) {
     console.error('Error storing price in tracked history:', error);
   }
@@ -692,11 +655,9 @@ async function checkTrackedItemsOnEnable() {
   try {
     console.log('Checking all tracked items after enabling price tracking...');
     
-    // Get tracked prices from local storage
-    const result = await browser.storage.local.get(['trackedPrices']);
-    console.log('Successfully retrieved tracked items from local storage for checking after enable');
-    
-    const trackedPrices = result.trackedPrices || [];
+    // Get tracked prices from data manager
+    const trackedPrices = await dataManager.getTrackedPrices();
+    console.log('Successfully retrieved tracked items from data manager for checking after enable');
     
     if (trackedPrices.length === 0) {
       console.log('No tracked items found to check');
@@ -719,13 +680,13 @@ async function checkAllTrackedItemsOnRefresh() {
   try {
     console.log('Checking all tracked items after extension refresh...');
     
-    // Get tracked prices from local storage
-    const result = await browser.storage.local.get(['trackedPrices', 'trackedItems']);
-    console.log('Successfully retrieved tracked items from local storage for refresh check');
+    // Get tracked data from data manager
+    const data = await dataManager.getAllTrackedData();
+    console.log('Successfully retrieved tracked items from data manager for refresh check');
     
     // Extract data from result
-    let trackedPrices = result.trackedPrices || [];
-    const oldTrackedItems = result.trackedItems || {};
+    let trackedPrices = data.trackedPrices || [];
+    const oldTrackedItems = data.trackedItems || {};
     
     console.log(`Storage check - trackedPrices: ${trackedPrices.length} items, trackedItems: ${Object.keys(oldTrackedItems).length} items`);
     
@@ -741,18 +702,21 @@ async function checkAllTrackedItemsOnRefresh() {
       // Process items from oldTrackedItems
       for (const [url, item] of Object.entries(oldTrackedItems)) {
         console.log(`Migrating old tracked item for ${url} without price data`);
-        trackedPrices.push({
-          date: new Date().toISOString().split('T')[0],
-          name: item.name || 'Unknown Product',
-          price: '0.00', // Default price since we don't have price data
-          url: url,
-          imageUrl: item.imageUrl || '',
-          lastChecked: new Date().toISOString()
-        });
+        // Create tracked item using data manager structure control
+        const migratedItem = dataManager.createTrackedPriceItem(
+          url, 
+          item.name || 'Unknown Product', 
+          item.imageUrl || ''
+        );
+        // Add default price history entry since we don't have price data
+        const defaultHistoryEntry = dataManager.createPriceHistoryEntry('0.00');
+        migratedItem.history.push(defaultHistoryEntry);
+        
+        trackedPrices.push(migratedItem);
       }
       
-      // Save the updated trackedPrices to local storage
-      await browser.storage.local.set({ trackedPrices: trackedPrices });
+      // Save the updated trackedPrices using data manager
+      await dataManager.saveTrackedPrices(trackedPrices);
       
       console.log('Migration complete during refresh, all old items saved to unified storage');
     }
@@ -837,9 +801,9 @@ async function checkItemsOnStartup(trackedPrices) {
       }
     }
     
-    // Save updated tracking data to local storage
-    await browser.storage.local.set({ trackedPrices: trackedPrices });
-    console.log('Updated tracking data saved to local storage after startup check');
+    // Save updated tracking data using data manager
+    await dataManager.saveTrackedPrices(trackedPrices);
+    console.log('Updated tracking data saved using data manager after startup check');
     
   } catch (error) {
     console.error('Error checking prices on startup:', error);

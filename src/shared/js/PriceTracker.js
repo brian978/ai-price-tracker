@@ -8,6 +8,7 @@ class PriceTracker {
     this.trackedPrices = [];
     this.trackedItems = {};
     this.navigationType = navigationType; // 'update' for sidebar, 'create' for popup
+    this.dataManager = new PriceDataManager();
   }
 
   /**
@@ -35,11 +36,11 @@ class PriceTracker {
    */
   async loadData() {
     try {
-      // Load from local storage
-      const result = await browser.storage.local.get(['trackedPrices', 'trackedItems']);
+      // Load from data manager
+      const data = await this.dataManager.getAllTrackedData();
 
-      this.trackedPrices = result.trackedPrices || [];
-      this.trackedItems = result.trackedItems || {};
+      this.trackedPrices = data.trackedPrices;
+      this.trackedItems = data.trackedItems;
 
       // Display data after loading
       await this.displayPrices();
@@ -159,17 +160,18 @@ class PriceTracker {
    */
   async saveData(source) {
     try {
-      // Save to local storage
-      await browser.storage.local.set({
-        trackedPrices: this.trackedPrices,
-        trackedItems: this.trackedItems
-      });
+      // Save to data manager
+      const success = await this.dataManager.saveAllTrackedData(this.trackedPrices, this.trackedItems);
 
-      // Show success notification when saving after tracking a price
-      if (source === 'track') {
-        this.showNotification('Price tracked successfully!', 'success');
+      if (success) {
+        // Show success notification when saving after tracking a price
+        if (source === 'track') {
+          this.showNotification('Price tracked successfully!', 'success');
+        }
+        return true;
+      } else {
+        throw new Error('Failed to save data');
       }
-      return true;
     } catch (error) {
       console.error('Error saving data:', error);
       this.showNotification('Error saving data. Please try again.', 'error');
@@ -303,43 +305,8 @@ class PriceTracker {
         throw new Error(response.error);
       }
 
-      // Find or create tracked item using the same structure as background.js
-      let trackedItem = this.trackedPrices.find(item => item.url === url);
-      
-      if (!trackedItem) {
-        // Create new tracked item with history array
-        trackedItem = {
-          url: url,
-          name: response.name,
-          imageUrl: response.imageUrl,
-          lastChecked: new Date().toISOString(),
-          history: []
-        };
-        this.trackedPrices.push(trackedItem);
-      } else {
-        // Update existing item
-        trackedItem.name = response.name || trackedItem.name;
-        trackedItem.lastChecked = new Date().toISOString();
-        if (response.imageUrl) {
-          trackedItem.imageUrl = response.imageUrl;
-        }
-      }
-      
-      // Check if price is different from the last recorded price
-      const lastHistoryEntry = trackedItem.history[trackedItem.history.length - 1];
-      if (!lastHistoryEntry || lastHistoryEntry.price !== response.price) {
-        // Add new price to history
-        trackedItem.history.push({
-          price: response.price,
-          date: currentDate,
-          timestamp: new Date().toISOString()
-        });
-        
-        // Keep only the most recent 50 price entries per item
-        if (trackedItem.history.length > 50) {
-          trackedItem.history.shift(); // Remove oldest entry
-        }
-      }
+      // Use data manager to add price to history
+      await this.dataManager.addPriceToHistory(url, response.name, response.price, response.imageUrl);
 
       // Update tracked items
       if (!this.trackedItems[url]) {
@@ -349,8 +316,11 @@ class PriceTracker {
         };
       }
 
-      // Save data and show success notification
-      await this.saveData('track');
+      // Reload data to sync with storage
+      await this.loadData();
+
+      // Show success notification
+      this.showNotification('Price tracked successfully!', 'success');
 
       // Update display
       await this.displayPrices();
@@ -547,9 +517,22 @@ class PriceTracker {
     const itemsList = document.getElementById('items-list');
     itemsList.innerHTML = '';
 
-    const items = Object.entries(this.trackedItems);
+    // Get unique items from trackedPrices array instead of trackedItems object
+    const uniqueItems = [];
+    const seenUrls = new Set();
+    
+    for (const priceItem of this.trackedPrices) {
+      if (!seenUrls.has(priceItem.url)) {
+        seenUrls.add(priceItem.url);
+        uniqueItems.push({
+          url: priceItem.url,
+          name: priceItem.name,
+          imageUrl: priceItem.imageUrl
+        });
+      }
+    }
 
-    if (items.length === 0) {
+    if (uniqueItems.length === 0) {
       const noItemsDiv = document.createElement('div');
       noItemsDiv.style.textAlign = 'center';
       noItemsDiv.style.padding = '20px';
@@ -558,7 +541,7 @@ class PriceTracker {
       return;
     }
 
-    items.forEach(([url, item]) => {
+    uniqueItems.forEach((item) => {
       const itemEntry = document.createElement('div');
       itemEntry.className = 'item-entry';
 
@@ -571,14 +554,14 @@ class PriceTracker {
       const itemNameDiv = document.createElement('div');
       itemNameDiv.className = 'item-name';
       itemNameDiv.setAttribute('title', item.name);
-      itemNameDiv.setAttribute('data-url', url);
+      itemNameDiv.setAttribute('data-url', item.url);
       itemNameDiv.textContent = truncatedName;
       itemEntry.appendChild(itemNameDiv);
 
       // Create delete item div
       const deleteItemDiv = document.createElement('div');
       deleteItemDiv.className = 'delete-item';
-      deleteItemDiv.setAttribute('data-url', url);
+      deleteItemDiv.setAttribute('data-url', item.url);
       deleteItemDiv.textContent = '🗑️';
       itemEntry.appendChild(deleteItemDiv);
 
