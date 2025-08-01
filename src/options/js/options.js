@@ -147,29 +147,39 @@ function showClearStatusMessage(message, type) {
 }
 
 // Clear price check history only (NOT tracked items)
-function clearPriceCheckHistory() {
+function clearPriceHistory() {
   const confirmed = confirm(
-    'Are you sure you want to clear all price check history? This action cannot be undone.'
+    'Are you sure you want to clear all price history? This action cannot be undone.'
   );
 
   if (confirmed) {
-    // Clear only the price check history (NOT trackedPrices and trackedItems)
-    browser.storage.local.set({
-      priceCheckHistory: []
-    })
-    .then(() => {
-      showClearStatusMessage('Price check history cleared successfully!', 'success');
-      
-      // Also refresh the price history display if we're on that tab
-      const priceHistoryTab = document.getElementById('price-history');
-      if (priceHistoryTab.classList.contains('active')) {
-        loadPriceHistory();
-      }
-    })
-    .catch(error => {
-      console.error('Error clearing price check history:', error);
-      showClearStatusMessage('Error clearing price check history. Please try again.', 'error');
-    });
+    // Clear the history from all tracked items but keep the items themselves
+    browser.storage.local.get('trackedPrices')
+      .then(result => {
+        const trackedPrices = result.trackedPrices || [];
+        // Clear history array for each tracked item
+        trackedPrices.forEach(item => {
+          if (item.history) {
+            item.history = [];
+          }
+        });
+        
+        // Save the updated trackedPrices back to storage
+        return browser.storage.local.set({ trackedPrices: trackedPrices });
+      })
+      .then(() => {
+        showClearStatusMessage('Price check history cleared successfully!', 'success');
+        
+        // Also refresh the price history display if we're on that tab
+        const priceHistoryTab = document.getElementById('price-history');
+        if (priceHistoryTab.classList.contains('active')) {
+          loadPriceHistory();
+        }
+      })
+      .catch(error => {
+        console.error('Error clearing price check history:', error);
+        showClearStatusMessage('Error clearing price check history. Please try again.', 'error');
+      });
   }
 }
 
@@ -221,9 +231,23 @@ function setupTabs() {
 
 // Load price history from storage and display it
 function loadPriceHistory() {
-  browser.storage.local.get('priceCheckHistory')
+  browser.storage.local.get('trackedPrices')
     .then(result => {
-      const history = result.priceCheckHistory || [];
+      const trackedPrices = result.trackedPrices || [];
+      // Extract all history entries from all tracked items
+      const history = [];
+      trackedPrices.forEach(item => {
+        if (item.history && Array.isArray(item.history)) {
+          item.history.forEach(historyEntry => {
+            history.push({
+              productName: item.name,
+              price: historyEntry.price,
+              timestamp: historyEntry.timestamp,
+              url: item.url
+            });
+          });
+        }
+      });
       displayPriceHistory(history);
     })
     .catch(error => {
@@ -343,6 +367,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('show-hide-btn').addEventListener('click', toggleApiKeyVisibility);
   document.getElementById('save-view-btn').addEventListener('click', saveViewMode);
   document.getElementById('save-alarm-btn').addEventListener('click', savePriceAlarmSetting);
-  document.getElementById('clear-price-check-history-btn').addEventListener('click', clearPriceCheckHistory);
+  document.getElementById('clear-price-check-history-btn').addEventListener('click', clearPriceHistory);
   document.getElementById('clear-price-drop-history-btn').addEventListener('click', clearPriceDropHistory);
 });

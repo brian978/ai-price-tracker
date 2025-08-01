@@ -340,25 +340,6 @@ function getLatestPricePerUrl(trackedPrices) {
   return latestPrices;
 }
 
-function updateLastChecked(trackedPrices, url, timestamp) {
-  // Find the most recent entry for this URL and update its lastChecked
-  let latestEntry = null;
-  let latestIndex = -1;
-  
-  for (let i = 0; i < trackedPrices.length; i++) {
-    const entry = trackedPrices[i];
-    if (entry.url === url) {
-      if (!latestEntry || new Date(entry.date) > new Date(latestEntry.date)) {
-        latestEntry = entry;
-        latestIndex = i;
-      }
-    }
-  }
-  
-  if (latestEntry && latestIndex >= 0) {
-    trackedPrices[latestIndex].lastChecked = timestamp;
-  }
-}
 
 function getUrlsNeedingCheck(trackedPrices, hoursThreshold = 1) {
   const latestPrices = getLatestPricePerUrl(trackedPrices);
@@ -477,9 +458,7 @@ async function setupPriceTracking(url, initialPrice) {
       });
       console.log(`Added new price tracking entry for ${url} with initial price ${initialPrice}`);
     } else {
-      // Update the most recent entry's lastChecked
-      updateLastChecked(trackedPrices, url, new Date().toISOString());
-      console.log(`Updated lastChecked for existing entries of ${url}`);
+      console.log(`Price tracking already exists for ${url}`);
     }
     
     // Save to local storage
@@ -540,33 +519,18 @@ async function checkAllPrices() {
         // Validate the returned data
         if (!currentData || !currentData.price) {
           console.error(`Invalid data returned for ${url}:`, currentData);
-          // Update last checked time even if we couldn't get a valid price
-          updateLastChecked(trackedPrices, url, new Date().toISOString());
           continue; // Skip to the next URL
         }
         
         const currentPrice = currentData.price;
         const oldPrice = latestEntry.price;
         
-        // Update last checked time
-        updateLastChecked(trackedPrices, url, new Date().toISOString());
-        
-        // Store price check in history (regardless of price change)
-        await storePriceCheckHistory(url, currentData.name || 'Unknown Product', currentPrice);
+        // Store price in tracked history (only if different from last price)
+        await storePriceInTrackedHistory(trackedPrices, url, currentData.name || 'Unknown Product', currentPrice, latestEntry.imageUrl || '');
         
         // Compare prices
         if (isPriceLower(currentPrice, oldPrice)) {
           console.log(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
-          
-          // Add new price entry to the array
-          trackedPrices.push({
-            date: new Date().toISOString().split('T')[0],
-            name: currentData.name || latestEntry.name || 'Unknown Product',
-            price: currentPrice,
-            url: url,
-            imageUrl: latestEntry.imageUrl || '',
-            lastChecked: new Date().toISOString()
-          });
           
           // Send notification
           await sendPriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
@@ -677,31 +641,49 @@ async function storePriceDropNotification(url, productName, oldPrice, newPrice) 
   }
 }
 
-// Store all price checks in history (not just drops)
-async function storePriceCheckHistory(url, productName, price) {
+// Store price check in trackedPrices history (only if price is different)
+async function storePriceInTrackedHistory(trackedPrices, url, productName, price, imageUrl = '') {
   try {
-    // Get existing price check history from local storage
-    const result = await browser.storage.local.get('priceCheckHistory');
-    const history = result.priceCheckHistory || [];
+    // Find existing tracked item for this URL
+    let trackedItem = trackedPrices.find(item => item.url === url);
     
-    // Add new price check to history
-    history.push({
-      url: url,
-      productName: productName,
-      price: price,
-      timestamp: new Date().toISOString()
-    });
-    
-    // Keep only the most recent 100 price checks
-    if (history.length > 100) {
-      history.shift(); // Remove oldest check
+    if (!trackedItem) {
+      // Create new tracked item
+      trackedItem = {
+        url: url,
+        name: productName,
+        imageUrl: imageUrl,
+        lastChecked: new Date().toISOString(),
+        history: []
+      };
+      trackedPrices.push(trackedItem);
+    } else {
+      // Update existing item
+      trackedItem.name = productName || trackedItem.name;
+      trackedItem.lastChecked = new Date().toISOString();
+      if (imageUrl) {
+        trackedItem.imageUrl = imageUrl;
+      }
     }
     
-    // Save updated history to local storage
-    await browser.storage.local.set({ 'priceCheckHistory': history });
+    // Check if price is different from the last recorded price
+    const lastHistoryEntry = trackedItem.history[trackedItem.history.length - 1];
+    if (!lastHistoryEntry || lastHistoryEntry.price !== price) {
+      // Add new price to history
+      trackedItem.history.push({
+        price: price,
+        date: new Date().toISOString().split('T')[0],
+        timestamp: new Date().toISOString()
+      });
+      
+      // Keep only the most recent 50 price entries per item
+      if (trackedItem.history.length > 50) {
+        trackedItem.history.shift(); // Remove oldest entry
+      }
+    }
     
   } catch (error) {
-    console.error('Error storing price check history:', error);
+    console.error('Error storing price in tracked history:', error);
   }
 }
 
@@ -824,33 +806,18 @@ async function checkItemsOnStartup(trackedPrices) {
         // Validate the returned data
         if (!currentData || !currentData.price) {
           console.error(`Invalid data returned for ${url}:`, currentData);
-          // Update last checked time even if we couldn't get a valid price
-          updateLastChecked(trackedPrices, url, new Date().toISOString());
           continue; // Skip to the next URL
         }
         
         const currentPrice = currentData.price;
         const oldPrice = latestEntry.price;
         
-        // Update last checked time
-        updateLastChecked(trackedPrices, url, new Date().toISOString());
-        
-        // Store price check in history (regardless of price change)
-        await storePriceCheckHistory(url, currentData.name || 'Unknown Product', currentPrice);
+        // Store price in tracked history (only if different from last price)
+        await storePriceInTrackedHistory(trackedPrices, url, currentData.name || 'Unknown Product', currentPrice, latestEntry.imageUrl || '');
         
         // Compare prices
         if (isPriceLower(currentPrice, oldPrice)) {
           console.log(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
-          
-          // Add new price entry to the array
-          trackedPrices.push({
-            date: new Date().toISOString().split('T')[0],
-            name: currentData.name || latestEntry.name || 'Unknown Product',
-            price: currentPrice,
-            url: url,
-            imageUrl: latestEntry.imageUrl || '',
-            lastChecked: new Date().toISOString()
-          });
           
           // Send notification
           await sendPriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);

@@ -267,9 +267,9 @@ class PriceTracker {
 
       // Check if we already tracked this URL recently
       const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-      const recentlyTracked = this.trackedPrices.some(entry => 
-        entry.url === url && entry.date === currentDate
-      );
+      const existingItem = this.trackedPrices.find(item => item.url === url);
+      const recentlyTracked = existingItem && existingItem.history && 
+        existingItem.history.some(historyEntry => historyEntry.date === currentDate);
 
       if (recentlyTracked) {
         this.showNotification('You have already tracked this item today.', 'warning');
@@ -303,17 +303,43 @@ class PriceTracker {
         throw new Error(response.error);
       }
 
-      // Add new price entry
-      const newEntry = {
-        date: currentDate,
-        name: response.name,
-        price: response.price,
-        url: url,
-        imageUrl: response.imageUrl,
-        lastChecked: new Date().toISOString()
-      };
-
-      this.trackedPrices.push(newEntry);
+      // Find or create tracked item using the same structure as background.js
+      let trackedItem = this.trackedPrices.find(item => item.url === url);
+      
+      if (!trackedItem) {
+        // Create new tracked item with history array
+        trackedItem = {
+          url: url,
+          name: response.name,
+          imageUrl: response.imageUrl,
+          lastChecked: new Date().toISOString(),
+          history: []
+        };
+        this.trackedPrices.push(trackedItem);
+      } else {
+        // Update existing item
+        trackedItem.name = response.name || trackedItem.name;
+        trackedItem.lastChecked = new Date().toISOString();
+        if (response.imageUrl) {
+          trackedItem.imageUrl = response.imageUrl;
+        }
+      }
+      
+      // Check if price is different from the last recorded price
+      const lastHistoryEntry = trackedItem.history[trackedItem.history.length - 1];
+      if (!lastHistoryEntry || lastHistoryEntry.price !== response.price) {
+        // Add new price to history
+        trackedItem.history.push({
+          price: response.price,
+          date: currentDate,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Keep only the most recent 50 price entries per item
+        if (trackedItem.history.length > 50) {
+          trackedItem.history.shift(); // Remove oldest entry
+        }
+      }
 
       // Update tracked items
       if (!this.trackedItems[url]) {
@@ -381,18 +407,17 @@ class PriceTracker {
       const currentUrl = tabs[0].url;
       console.log('displayPrices() called for URL:', currentUrl);
 
-      // Filter prices for the current URL using normalized URL matching
+      // Find tracked item for the current URL using normalized URL matching
       const normalizedCurrentUrl = this.normalizeUrl(currentUrl);
-      const currentItemPrices = this.trackedPrices.filter(entry => {
-        const normalizedStoredUrl = this.normalizeUrl(entry.url);
+      const currentItem = this.trackedPrices.find(item => {
+        const normalizedStoredUrl = this.normalizeUrl(item.url);
         return normalizedStoredUrl === normalizedCurrentUrl;
       });
-      console.log(`Found ${currentItemPrices.length} prices for current URL (normalized matching)`);
 
       // Only clear the table after we know what content to show
       tableBody.innerHTML = '';
 
-      if (currentItemPrices.length === 0) {
+      if (!currentItem || !currentItem.history || currentItem.history.length === 0) {
         const row = document.createElement('tr');
         const cell = document.createElement('td');
         cell.setAttribute('colspan', '3');
@@ -403,16 +428,16 @@ class PriceTracker {
         return;
       }
 
-      // Sort by date (newest first)
-      const sortedPrices = [...currentItemPrices].sort((a, b) => {
-        return new Date(b.date) - new Date(a.date);
+      // Sort history by date (newest first)
+      const sortedHistory = [...currentItem.history].sort((a, b) => {
+        return new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date);
       });
 
-      sortedPrices.forEach((entry, index) => {
+      sortedHistory.forEach((historyEntry, index) => {
         const row = document.createElement('tr');
 
         // Format date
-        const dateObj = new Date(entry.date);
+        const dateObj = new Date(historyEntry.timestamp || historyEntry.date);
         const formattedDate = dateObj.toLocaleDateString();
 
         // Create date cell
@@ -422,14 +447,15 @@ class PriceTracker {
 
         // Create price cell
         const priceCell = document.createElement('td');
-        priceCell.textContent = entry.price;
+        priceCell.textContent = historyEntry.price;
         row.appendChild(priceCell);
 
         // Create delete cell
         const deleteCell = document.createElement('td');
         const deleteSpan = document.createElement('span');
         deleteSpan.className = 'delete-entry';
-        deleteSpan.setAttribute('data-index', this.trackedPrices.indexOf(entry).toString());
+        deleteSpan.setAttribute('data-item-url', currentItem.url);
+        deleteSpan.setAttribute('data-history-index', index.toString());
         deleteSpan.textContent = '🗑️';
         deleteCell.appendChild(deleteSpan);
         row.appendChild(deleteCell);
@@ -440,8 +466,9 @@ class PriceTracker {
       // Add event listeners to delete buttons
       document.querySelectorAll('.delete-entry').forEach(button => {
         button.addEventListener('click', async () => {
-          const index = parseInt(button.getAttribute('data-index'));
-          await this.deletePrice(index);
+          const itemUrl = button.getAttribute('data-item-url');
+          const historyIndex = parseInt(button.getAttribute('data-history-index'));
+          await this.deletePriceHistoryEntry(itemUrl, historyIndex);
         });
       });
     } catch (error) {
@@ -451,45 +478,64 @@ class PriceTracker {
   }
 
   /**
-   * Delete price entry
+   * Delete price history entry
    */
-  async deletePrice(index) {
+  async deletePriceHistoryEntry(itemUrl, historyIndex) {
     const confirmed = await this.customConfirm(
       'Are you sure you want to delete this price entry?',
       'Delete Price Entry'
     );
 
     if (confirmed) {
-      this.trackedPrices.splice(index, 1);
-      await this.saveData();
-      await this.displayPrices();
+      // Find the tracked item
+      const trackedItem = this.trackedPrices.find(item => item.url === itemUrl);
+      if (trackedItem && trackedItem.history && trackedItem.history[historyIndex]) {
+        // Remove the specific history entry
+        trackedItem.history.splice(historyIndex, 1);
+        
+        // If no history left, remove the entire item
+        if (trackedItem.history.length === 0) {
+          const itemIndex = this.trackedPrices.indexOf(trackedItem);
+          this.trackedPrices.splice(itemIndex, 1);
+        }
+        
+        await this.saveData();
+        await this.displayPrices();
 
-      // Update items list if needed
-      this.updateTrackedItems();
-      this.displayItems();
+        // Update items list if needed
+        this.updateTrackedItems();
+        this.displayItems();
 
-      // Update current item display
-      await this.displayCurrentItem();
+        // Update current item display
+        await this.displayCurrentItem();
 
-      this.showNotification('Price entry deleted', 'success');
+        this.showNotification('Price entry deleted', 'success');
+      }
     }
   }
 
   /**
-   * Update tracked items based on price entries
+   * Delete price entry (legacy method - kept for compatibility)
+   */
+  async deletePrice(index) {
+    // This method is kept for backward compatibility but shouldn't be used with new structure
+    console.warn('deletePrice method called - this should use deletePriceHistoryEntry instead');
+  }
+
+  /**
+   * Update tracked items based on tracked items (new structure)
    */
   updateTrackedItems() {
-    const urls = new Set();
+    // Clear existing trackedItems
+    this.trackedItems = {};
 
-    // Collect all URLs that still have price entries
-    this.trackedPrices.forEach(entry => {
-      urls.add(entry.url);
-    });
-
-    // Remove items that no longer have price entries
-    Object.keys(this.trackedItems).forEach(url => {
-      if (!urls.has(url)) {
-        delete this.trackedItems[url];
+    // Rebuild trackedItems from the new structure
+    this.trackedPrices.forEach(item => {
+      if (item.url && item.name) {
+        this.trackedItems[item.url] = {
+          name: item.name,
+          imageUrl: item.imageUrl || ''
+        };
       }
     });
   }
@@ -577,10 +623,10 @@ class PriceTracker {
     );
 
     if (confirmed) {
-      // Remove all price entries for this URL
-      this.trackedPrices = this.trackedPrices.filter(entry => entry.url !== url);
+      // Remove the tracked item (which contains all price history)
+      this.trackedPrices = this.trackedPrices.filter(item => item.url !== url);
 
-      // Remove the item
+      // Remove from trackedItems as well
       delete this.trackedItems[url];
 
       // Save data
