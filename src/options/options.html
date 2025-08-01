@@ -73,6 +73,11 @@
           <label for="price-alarm-enabled">Enable hourly price checks</label>
         </div>
         
+        <div id="alarm-timing-info" class="alarm-timing-info" style="margin: 10px 0; padding: 10px; background-color: #f5f5f5; border-radius: 4px; font-size: 14px;">
+          <div id="last-check-time">Last automated check: <span id="last-check-value">Never</span></div>
+          <div id="next-check-time">Next automated check: <span id="next-check-value">Not scheduled</span></div>
+        </div>
+        
         <p class="warning-text">
           <strong>Note:</strong> Enabling this option will burn through credits faster as it will do an hourly check on prices using the LLM.
         </p>

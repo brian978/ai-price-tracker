@@ -47,6 +47,9 @@ function loadOptions() {
       // Set price alarm checkbox (default to off if not set)
       const priceAlarmCheckbox = document.getElementById('price-alarm-enabled');
       priceAlarmCheckbox.checked = syncResult.priceAlarmEnabled === true;
+      
+      // Load alarm timing information
+      loadAlarmTimingInfo();
     })
     .catch(error => {
       logger.errorSync('Error loading options:', error);
@@ -114,11 +117,103 @@ function savePriceAlarmSetting() {
   browser.storage.local.set({ priceAlarmEnabled: priceAlarmEnabled })
     .then(() => {
       showAlarmStatusMessage(`Price alarm ${priceAlarmEnabled ? 'enabled' : 'disabled'} successfully!`, 'success');
+      // Update timing info after saving
+      loadAlarmTimingInfo();
     })
     .catch(error => {
       logger.errorSync('Error saving price alarm setting:', error);
       showAlarmStatusMessage('Error saving price alarm setting. Please try again.', 'error');
     });
+}
+
+// Load and display alarm timing information
+function loadAlarmTimingInfo() {
+  Promise.all([
+    browser.storage.local.get(['priceAlarmEnabled', 'trackedPrices']),
+    browser.alarms.getAll()
+  ])
+    .then(([storageResult, alarms]) => {
+      const priceAlarmEnabled = storageResult.priceAlarmEnabled === true;
+      const trackedPrices = storageResult.trackedPrices || [];
+      
+      // Find the price check alarm
+      const priceAlarm = alarms.find(alarm => alarm.name === 'priceCheckAlarm');
+      
+      // Calculate last check time
+      let lastCheckTime = null;
+      if (trackedPrices.length > 0) {
+        // Find the most recent lastChecked timestamp across all tracked items
+        const lastCheckedTimes = trackedPrices
+          .map(item => item.lastChecked)
+          .filter(time => time)
+          .map(time => new Date(time))
+          .sort((a, b) => b - a);
+        
+        if (lastCheckedTimes.length > 0) {
+          lastCheckTime = lastCheckedTimes[0];
+        }
+      }
+      
+      // Update last check display
+      const lastCheckElement = document.getElementById('last-check-value');
+      if (lastCheckTime) {
+        lastCheckElement.textContent = formatDateTime(lastCheckTime);
+      } else {
+        lastCheckElement.textContent = 'Never';
+      }
+      
+      // Update next check display
+      const nextCheckElement = document.getElementById('next-check-value');
+      if (priceAlarmEnabled && priceAlarm && priceAlarm.scheduledTime) {
+        const nextCheckTime = new Date(priceAlarm.scheduledTime);
+        nextCheckElement.textContent = formatDateTime(nextCheckTime);
+      } else if (priceAlarmEnabled) {
+        nextCheckElement.textContent = 'Within the next hour';
+      } else {
+        nextCheckElement.textContent = 'Not scheduled (alarm disabled)';
+      }
+    })
+    .catch(error => {
+      logger.errorSync('Error loading alarm timing info:', error);
+      document.getElementById('last-check-value').textContent = 'Error loading';
+      document.getElementById('next-check-value').textContent = 'Error loading';
+    });
+}
+
+// Format date and time for display
+function formatDateTime(date) {
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  // For future dates (next check)
+  if (diffMs < 0) {
+    const futureMins = Math.abs(diffMins);
+    const futureHours = Math.abs(diffHours);
+    
+    if (futureMins < 60) {
+      return `in ${futureMins} minute${futureMins !== 1 ? 's' : ''}`;
+    } else if (futureHours < 24) {
+      return `in ${futureHours} hour${futureHours !== 1 ? 's' : ''}`;
+    } else {
+      return date.toLocaleString();
+    }
+  }
+  
+  // For past dates (last check)
+  if (diffMins < 1) {
+    return 'Just now';
+  } else if (diffMins < 60) {
+    return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+  } else if (diffHours < 24) {
+    return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  } else if (diffDays < 7) {
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+  } else {
+    return date.toLocaleString();
+  }
 }
 
 // Display alarm status message
