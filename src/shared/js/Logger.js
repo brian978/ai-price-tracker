@@ -83,43 +83,6 @@ class Logger {
     }
   }
 
-  /**
-   * Log a warning (only in development mode)
-   */
-  async warn(...args) {
-    await this.ensureInitialized();
-    if (this.isDevelopmentMode) {
-      console.warn(...args);
-    }
-  }
-
-  /**
-   * Log info (only in development mode)
-   */
-  async info(...args) {
-    await this.ensureInitialized();
-    if (this.isDevelopmentMode) {
-      console.info(...args);
-    }
-  }
-
-  /**
-   * Log debug information (only in development mode)
-   */
-  async debug(...args) {
-    await this.ensureInitialized();
-    if (this.isDevelopmentMode) {
-      console.debug(...args);
-    }
-  }
-
-  /**
-   * Get current development mode status
-   */
-  async isDev() {
-    await this.ensureInitialized();
-    return this.isDevelopmentMode;
-  }
 
   /**
    * Synchronous logging methods (use with caution - may not work if not initialized)
@@ -146,10 +109,3 @@ class Logger {
 
 // Create a global logger instance
 const logger = new Logger();
-
-// For backward compatibility, also expose individual functions
-const devLog = (...args) => logger.log(...args);
-const devError = (...args) => logger.error(...args);
-const devWarn = (...args) => logger.warn(...args);
-const devInfo = (...args) => logger.info(...args);
-const devDebug = (...args) => logger.debug(...args);
