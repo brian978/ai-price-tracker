@@ -11,7 +11,9 @@
     "activeTab",
     "storage",
     "tabs",
-    "<all_urls>"
+    "<all_urls>",
+    "alarms",
+    "notifications"
   ],
   "browser_action": {
     "default_icon": {
@@ -32,7 +34,8 @@
     "open_in_tab": true
   },
   "background": {
-    "scripts": ["background/background.js"]
+    "scripts": ["shared/js/Logger.js", "shared/js/PriceDataManager.js", "background/background.js"],
+    "persistent": false
   },
   "browser_specific_settings": {
     "gecko": {
