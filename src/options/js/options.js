@@ -133,6 +133,67 @@ function showAlarmStatusMessage(message, type) {
   }, 3000);
 }
 
+// Display clear history status message
+function showClearStatusMessage(message, type) {
+  const statusElement = document.getElementById('clear-status-message');
+  statusElement.textContent = message;
+  statusElement.className = type;
+
+  // Clear the message after 3 seconds
+  setTimeout(() => {
+    statusElement.className = '';
+    statusElement.textContent = '';
+  }, 3000);
+}
+
+// Clear price check history only (NOT tracked items)
+function clearPriceCheckHistory() {
+  const confirmed = confirm(
+    'Are you sure you want to clear all price check history? This action cannot be undone.'
+  );
+
+  if (confirmed) {
+    // Clear only the price check history (NOT trackedPrices and trackedItems)
+    browser.storage.local.set({
+      priceCheckHistory: []
+    })
+    .then(() => {
+      showClearStatusMessage('Price check history cleared successfully!', 'success');
+      
+      // Also refresh the price history display if we're on that tab
+      const priceHistoryTab = document.getElementById('price-history');
+      if (priceHistoryTab.classList.contains('active')) {
+        loadPriceHistory();
+      }
+    })
+    .catch(error => {
+      console.error('Error clearing price check history:', error);
+      showClearStatusMessage('Error clearing price check history. Please try again.', 'error');
+    });
+  }
+}
+
+// Clear tracked prices for alarm
+function clearPriceDropHistory() {
+  const confirmed = confirm(
+    'Are you sure you want to clear all the price drop history? This action cannot be undone.'
+  );
+
+  if (confirmed) {
+    // Clear only the tracked prices for alarm
+    browser.storage.local.set({
+      priceDropHistory: {}
+    })
+    .then(() => {
+      showClearStatusMessage('Tracked prices for alarm cleared successfully!', 'success');
+    })
+    .catch(error => {
+      console.error('Error clearing tracked prices for alarm:', error);
+      showClearStatusMessage('Error clearing tracked prices for alarm. Please try again.', 'error');
+    });
+  }
+}
+
 // Tab switching functionality
 function setupTabs() {
   const tabButtons = document.querySelectorAll('.tab-button');
@@ -282,4 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('show-hide-btn').addEventListener('click', toggleApiKeyVisibility);
   document.getElementById('save-view-btn').addEventListener('click', saveViewMode);
   document.getElementById('save-alarm-btn').addEventListener('click', savePriceAlarmSetting);
+  document.getElementById('clear-price-check-history-btn').addEventListener('click', clearPriceCheckHistory);
+  document.getElementById('clear-price-drop-history-btn').addEventListener('click', clearPriceDropHistory);
 });
