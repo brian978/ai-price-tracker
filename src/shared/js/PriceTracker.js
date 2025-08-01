@@ -5,7 +5,6 @@
  */
 class PriceTracker {
   constructor(navigationType = 'update') {
-    this.currentTab = 'prices';
     this.trackedPrices = [];
     this.trackedItems = {};
     this.navigationType = navigationType; // 'update' for sidebar, 'create' for popup
@@ -198,8 +197,6 @@ class PriceTracker {
    * Switch between tabs
    */
   switchTab(tabName) {
-    this.currentTab = tabName;
-
     // Update active tab button
     document.querySelectorAll('.tab-button').forEach(button => {
       if (button.getAttribute('data-tab') === tabName) {
