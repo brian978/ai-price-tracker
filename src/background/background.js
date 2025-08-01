@@ -104,7 +104,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     trackPrice(message.url, message.apiKey)
       .then(result => {
         // After tracking the price, set up periodic checking for this URL
-        setupPriceTracking(message.url, result.price);
+        setupPriceTracking(message.url, result.price, result.name, result.imageUrl);
         sendResponse(result);
       })
       .catch(error => sendResponse({ error: error.message }));
@@ -436,7 +436,7 @@ async function handleAlarm(alarm) {
 }
 
 // Set up price tracking for a specific URL
-async function setupPriceTracking(url, initialPrice) {
+async function setupPriceTracking(url, initialPrice, productName = 'Unknown Product', imageUrl = '') {
   try {
     // Get currently tracked prices from local storage
     const result = await browser.storage.local.get('trackedPrices');
@@ -449,7 +449,7 @@ async function setupPriceTracking(url, initialPrice) {
     
     if (existingEntries.length === 0) {
       // No existing entries, create a new one using data manager structure control
-      const newTrackedItem = dataManager.createTrackedPriceItem(url, 'Product', '');
+      const newTrackedItem = dataManager.createTrackedPriceItem(url, productName, imageUrl);
       // Add initial price to history
       const initialHistoryEntry = dataManager.createPriceHistoryEntry(initialPrice);
       newTrackedItem.history.push(initialHistoryEntry);
