@@ -322,112 +322,102 @@ async function extractDataWithOpenAI(url, apiKey, pageContent) {
 
 // Price tracking functionality
 const PRICE_CHECK_ALARM_NAME = 'priceCheckAlarm';
-const TRACKED_PRICES_STORAGE_KEY = 'trackedPricesForAlarm';
+
+// Helper functions for unified trackedPrices array
+function getLatestPricePerUrl(trackedPrices) {
+  const latestPrices = {};
+  
+  // Group entries by URL and find the most recent one for each
+  for (const entry of trackedPrices) {
+    if (!entry.url || !entry.price) continue;
+    
+    if (!latestPrices[entry.url] || 
+        new Date(entry.date) > new Date(latestPrices[entry.url].date)) {
+      latestPrices[entry.url] = entry;
+    }
+  }
+  
+  return latestPrices;
+}
+
+function updateLastChecked(trackedPrices, url, timestamp) {
+  // Find the most recent entry for this URL and update its lastChecked
+  let latestEntry = null;
+  let latestIndex = -1;
+  
+  for (let i = 0; i < trackedPrices.length; i++) {
+    const entry = trackedPrices[i];
+    if (entry.url === url) {
+      if (!latestEntry || new Date(entry.date) > new Date(latestEntry.date)) {
+        latestEntry = entry;
+        latestIndex = i;
+      }
+    }
+  }
+  
+  if (latestEntry && latestIndex >= 0) {
+    trackedPrices[latestIndex].lastChecked = timestamp;
+  }
+}
+
+function getUrlsNeedingCheck(trackedPrices, hoursThreshold = 1) {
+  const latestPrices = getLatestPricePerUrl(trackedPrices);
+  const urlsNeedingCheck = [];
+  const now = new Date();
+  
+  for (const [url, entry] of Object.entries(latestPrices)) {
+    // Check for items that have never been checked
+    if (!entry.lastChecked) {
+      urlsNeedingCheck.push(url);
+      continue;
+    }
+    
+    // Check for items that haven't been checked in the specified time
+    const lastChecked = new Date(entry.lastChecked);
+    const hoursSinceLastCheck = (now - lastChecked) / (1000 * 60 * 60);
+    
+    if (hoursSinceLastCheck >= hoursThreshold) {
+      urlsNeedingCheck.push(url);
+    }
+  }
+  
+  return urlsNeedingCheck;
+}
 
 // Initialize the price tracking system
 async function initializePriceTracking() {
   try {
     // Check if price alarm is enabled and get tracked prices from local storage
-    const result = await browser.storage.local.get(['priceAlarmEnabled', TRACKED_PRICES_STORAGE_KEY, 'trackedPrices', 'trackedItems']);
+    const result = await browser.storage.local.get(['priceAlarmEnabled', 'trackedPrices']);
     console.log('Successfully retrieved data from local storage');
     
     const priceAlarmEnabled = result.priceAlarmEnabled === true;
-    let trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
-    
-    // MIGRATION: Check for older items stored in 'trackedPrices' and 'trackedItems'
-    // This ensures items added before the price tracking feature implementation are also checked
-    const oldTrackedPrices = result.trackedPrices || [];
-    const oldTrackedItems = result.trackedItems || {};
+    let trackedPrices = result.trackedPrices || [];
     
     console.log('Storage data retrieved:', {
       priceAlarmEnabled,
-      trackedPricesCount: Object.keys(trackedPrices).length,
-      oldTrackedPricesCount: oldTrackedPrices.length,
-      oldTrackedItemsCount: Object.keys(oldTrackedItems).length
+      trackedPricesCount: trackedPrices.length
     });
     
-    // Migrate old items to the new format if they're not already there
-    if (oldTrackedPrices.length > 0 || Object.keys(oldTrackedItems).length > 0) {
-      console.log('Found older tracked items, migrating to new format for price checks');
-      
-      // Process items from oldTrackedPrices
-      // First, group entries by URL and find the most recent price for each
-      const urlToLatestPrice = {};
-      for (const entry of oldTrackedPrices) {
-        if (entry.url && entry.price) {
-          if (!urlToLatestPrice[entry.url] || 
-              new Date(entry.date) > new Date(urlToLatestPrice[entry.url].date)) {
-            urlToLatestPrice[entry.url] = entry;
-          }
-        }
+    // Ensure all entries have lastChecked field (for entries that might not have it)
+    for (const entry of trackedPrices) {
+      if (!entry.lastChecked) {
+        entry.lastChecked = new Date().toISOString();
       }
-      
-      // Now add each URL with its most recent price
-      for (const [url, entry] of Object.entries(urlToLatestPrice)) {
-        if (!trackedPrices[url]) {
-          console.log(`Migrating old tracked price for ${url} (most recent: ${entry.price} from ${entry.date})`);
-          trackedPrices[url] = {
-            price: entry.price,
-            lastChecked: new Date().toISOString()
-          };
-        }
-      }
-      
-      // Process items from oldTrackedItems (in case there are URLs not in oldTrackedPrices)
-      for (const [url, item] of Object.entries(oldTrackedItems)) {
-        if (!trackedPrices[url]) {
-          // Find the most recent price for this item in oldTrackedPrices
-          const priceEntries = oldTrackedPrices.filter(entry => entry.url === url);
-          if (priceEntries.length > 0) {
-            // Sort by date (newest first) and get the most recent price
-            priceEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
-            const mostRecentPrice = priceEntries[0].price;
-            
-            console.log(`Migrating old tracked item for ${url} with price ${mostRecentPrice}`);
-            trackedPrices[url] = {
-              price: mostRecentPrice,
-              lastChecked: new Date().toISOString()
-            };
-          }
-        }
-      }
-      
-      // Save the updated trackedPrices to local storage
-      await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
-      console.log('Migration complete, all old items saved to local storage');
     }
+    
+    // Save the updated trackedPrices to local storage
+    await browser.storage.local.set({ trackedPrices: trackedPrices });
     
     // BROWSER RESTART HANDLING:
     // Since browser alarms don't run when the browser is closed, we need to check
     // if any products should have been checked while the browser was closed.
     // This ensures that even if a user opens their browser for short periods,
     // price checks will still happen at roughly hourly intervals.
-    const now = new Date();
-    let needsImmediateCheck = false;
+    const urlsNeedingCheck = getUrlsNeedingCheck(trackedPrices, 1);
     
-    // Check if any product hasn't been checked in the last hour or has never been checked
-    for (const [url, data] of Object.entries(trackedPrices)) {
-      // Check for items that have never been checked (no lastChecked property)
-      if (!data.lastChecked) {
-        console.log(`Product ${url} has never been checked before, marking for immediate check`);
-        needsImmediateCheck = true;
-        break; // One product needing a check is enough to trigger
-      }
-      // Check for items that haven't been checked in the last hour
-      else {
-        const lastChecked = new Date(data.lastChecked);
-        const hoursSinceLastCheck = (now - lastChecked) / (1000 * 60 * 60);
-        
-        if (hoursSinceLastCheck >= 1) {
-          console.log(`Product ${url} hasn't been checked in ${hoursSinceLastCheck.toFixed(2)} hours`);
-          needsImmediateCheck = true;
-          break; // One product needing a check is enough to trigger
-        }
-      }
-    }
-    
-    // If any product needs a check, do it immediately instead of waiting for the next alarm
-    if (needsImmediateCheck && Object.keys(trackedPrices).length > 0) {
+    if (urlsNeedingCheck.length > 0) {
+      console.log(`Found ${urlsNeedingCheck.length} products that need checking:`, urlsNeedingCheck);
       console.log('Some products need to be checked (never checked or not checked in over an hour), performing immediate check');
       // Use setTimeout to allow the extension to fully initialize first
       setTimeout(() => checkItemsOnStartup(trackedPrices), 5000);
@@ -465,22 +455,36 @@ async function handleAlarm(alarm) {
 async function setupPriceTracking(url, initialPrice) {
   try {
     // Get currently tracked prices from local storage
-    const result = await browser.storage.local.get(TRACKED_PRICES_STORAGE_KEY);
+    const result = await browser.storage.local.get('trackedPrices');
     console.log('Successfully retrieved tracked prices from local storage');
     
-    const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
+    const trackedPrices = result.trackedPrices || [];
     
-    // Add or update the URL with its price
-    trackedPrices[url] = {
-      price: initialPrice,
-      lastChecked: new Date().toISOString()
-    };
+    // Check if we already have entries for this URL
+    const existingEntries = trackedPrices.filter(entry => entry.url === url);
+    
+    if (existingEntries.length === 0) {
+      // No existing entries, create a new one
+      // Note: This function is called from the trackPrice flow, so we should have item info
+      // For now, we'll create a basic entry and let the main tracking flow fill in details
+      trackedPrices.push({
+        date: new Date().toISOString().split('T')[0],
+        name: 'Product', // This will be updated by the main tracking flow
+        price: initialPrice,
+        url: url,
+        imageUrl: '',
+        lastChecked: new Date().toISOString()
+      });
+      console.log(`Added new price tracking entry for ${url} with initial price ${initialPrice}`);
+    } else {
+      // Update the most recent entry's lastChecked
+      updateLastChecked(trackedPrices, url, new Date().toISOString());
+      console.log(`Updated lastChecked for existing entries of ${url}`);
+    }
     
     // Save to local storage
-    await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+    await browser.storage.local.set({ trackedPrices: trackedPrices });
     console.log(`Price tracking set up for ${url} with initial price ${initialPrice} (saved to local storage)`);
-    
-    console.log(`Price tracking set up for ${url} with initial price ${initialPrice}`);
     
     // Make sure the alarm is set up
     const alarms = await browser.alarms.getAll();
@@ -501,10 +505,10 @@ async function checkAllPrices() {
     console.log('Checking prices for all tracked items...');
     
     // Get tracked prices and settings from local storage
-    const result = await browser.storage.local.get([TRACKED_PRICES_STORAGE_KEY, 'priceAlarmEnabled', 'apiKey']);
+    const result = await browser.storage.local.get(['trackedPrices', 'priceAlarmEnabled', 'apiKey']);
     console.log('Successfully retrieved price tracking data from local storage');
     
-    const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
+    const trackedPrices = result.trackedPrices || [];
     const apiKey = result.apiKey;
     const priceAlarmEnabled = result.priceAlarmEnabled === true;
     
@@ -519,8 +523,11 @@ async function checkAllPrices() {
       return;
     }
     
+    // Get latest prices per URL for checking
+    const latestPrices = getLatestPricePerUrl(trackedPrices);
+    
     // Check each URL
-    for (const [url, data] of Object.entries(trackedPrices)) {
+    for (const [url, latestEntry] of Object.entries(latestPrices)) {
       try {
         console.log(`Checking price for ${url}`);
         
@@ -534,15 +541,15 @@ async function checkAllPrices() {
         if (!currentData || !currentData.price) {
           console.error(`Invalid data returned for ${url}:`, currentData);
           // Update last checked time even if we couldn't get a valid price
-          trackedPrices[url].lastChecked = new Date().toISOString();
+          updateLastChecked(trackedPrices, url, new Date().toISOString());
           continue; // Skip to the next URL
         }
         
         const currentPrice = currentData.price;
-        const oldPrice = data.price;
+        const oldPrice = latestEntry.price;
         
         // Update last checked time
-        trackedPrices[url].lastChecked = new Date().toISOString();
+        updateLastChecked(trackedPrices, url, new Date().toISOString());
         
         // Store price check in history (regardless of price change)
         await storePriceCheckHistory(url, currentData.name || 'Unknown Product', currentPrice);
@@ -551,14 +558,21 @@ async function checkAllPrices() {
         if (isPriceLower(currentPrice, oldPrice)) {
           console.log(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
           
-          // Update stored price
-          trackedPrices[url].price = currentPrice;
+          // Add new price entry to the array
+          trackedPrices.push({
+            date: new Date().toISOString().split('T')[0],
+            name: currentData.name || latestEntry.name || 'Unknown Product',
+            price: currentPrice,
+            url: url,
+            imageUrl: latestEntry.imageUrl || '',
+            lastChecked: new Date().toISOString()
+          });
           
           // Send notification
-          await sendPriceDropNotification(url, currentData.name, oldPrice, currentPrice);
+          await sendPriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
           
           // Store notification in history
-          await storePriceDropNotification(url, currentData.name, oldPrice, currentPrice);
+          await storePriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
         } else {
           console.log(`No price drop for ${url}, old: ${oldPrice}, current: ${currentPrice}`);
         }
@@ -573,7 +587,7 @@ async function checkAllPrices() {
     }
     
     // Save updated tracking data to local storage
-    await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+    await browser.storage.local.set({ trackedPrices: trackedPrices });
     
   } catch (error) {
     console.error('Error checking prices:', error);
@@ -697,20 +711,21 @@ async function checkTrackedItemsOnEnable() {
     console.log('Checking all tracked items after enabling price tracking...');
     
     // Get tracked prices from local storage
-    const result = await browser.storage.local.get([TRACKED_PRICES_STORAGE_KEY]);
+    const result = await browser.storage.local.get(['trackedPrices']);
     console.log('Successfully retrieved tracked items from local storage for checking after enable');
     
-    const trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
+    const trackedPrices = result.trackedPrices || [];
     
-    if (Object.keys(trackedPrices).length === 0) {
+    if (trackedPrices.length === 0) {
       console.log('No tracked items found to check');
       return;
     }
     
-    console.log(`Found ${Object.keys(trackedPrices).length} tracked items to check after enabling price tracking`);
+    // Get unique URLs from the array
+    const uniqueUrls = [...new Set(trackedPrices.map(entry => entry.url))];
+    console.log(`Found ${uniqueUrls.length} unique tracked items to check after enabling price tracking`);
     
-    // Mark all items for immediate checking by setting needsImmediateCheck to true
-    // and then call checkAllPrices to perform the checks
+    // Mark all items for immediate checking by calling checkAllPrices
     setTimeout(() => checkAllPrices(), 3000);
   } catch (error) {
     console.error('Error checking tracked items on enable:', error);
@@ -723,75 +738,51 @@ async function checkAllTrackedItemsOnRefresh() {
     console.log('Checking all tracked items after extension refresh...');
     
     // Get tracked prices from local storage
-    const result = await browser.storage.local.get([TRACKED_PRICES_STORAGE_KEY, 'trackedPrices', 'trackedItems']);
+    const result = await browser.storage.local.get(['trackedPrices', 'trackedItems']);
     console.log('Successfully retrieved tracked items from local storage for refresh check');
     
     // Extract data from result
-    let trackedPrices = result[TRACKED_PRICES_STORAGE_KEY] || {};
-    const oldTrackedPrices = result.trackedPrices || [];
+    let trackedPrices = result.trackedPrices || [];
     const oldTrackedItems = result.trackedItems || {};
     
-    console.log(`Storage check - trackedPricesForAlarm: ${Object.keys(trackedPrices).length} items, trackedPrices: ${oldTrackedPrices.length} items, trackedItems: ${Object.keys(oldTrackedItems).length} items`);
+    console.log(`Storage check - trackedPrices: ${trackedPrices.length} items, trackedItems: ${Object.keys(oldTrackedItems).length} items`);
     
     // Log the actual content for debugging
-    console.log('trackedPricesForAlarm content:', trackedPrices);
-    console.log('trackedPrices content:', oldTrackedPrices);
+    console.log('trackedPrices content:', trackedPrices);
     console.log('trackedItems content:', oldTrackedItems);
     
     // If we have no items in the main storage but have items in the old storage,
-    // migrate them first (similar to what we do in initializePriceTracking)
-    if (Object.keys(trackedPrices).length === 0 && 
-        (oldTrackedPrices.length > 0 || Object.keys(oldTrackedItems).length > 0)) {
-      console.log('Found older tracked items during refresh, migrating to new format for price checks');
-      
-      // Process items from oldTrackedPrices
-      const urlToLatestPrice = {};
-      for (const entry of oldTrackedPrices) {
-        if (entry.url && entry.price) {
-          if (!urlToLatestPrice[entry.url] || 
-              new Date(entry.date) > new Date(urlToLatestPrice[entry.url].date)) {
-            urlToLatestPrice[entry.url] = entry;
-          }
-        }
-      }
-      
-      // Add each URL with its most recent price
-      for (const [url, entry] of Object.entries(urlToLatestPrice)) {
-        console.log(`Migrating old tracked price for ${url} (most recent: ${entry.price} from ${entry.date})`);
-        trackedPrices[url] = {
-          price: entry.price,
-          lastChecked: new Date().toISOString()
-        };
-      }
+    // migrate them first
+    if (trackedPrices.length === 0 && Object.keys(oldTrackedItems).length > 0) {
+      console.log('Found older tracked items during refresh, migrating to unified format');
       
       // Process items from oldTrackedItems
       for (const [url, item] of Object.entries(oldTrackedItems)) {
-        if (!trackedPrices[url]) {
-          const priceEntries = oldTrackedPrices.filter(entry => entry.url === url);
-          if (priceEntries.length > 0) {
-            priceEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
-            const mostRecentPrice = priceEntries[0].price;
-            
-            console.log(`Migrating old tracked item for ${url} with price ${mostRecentPrice}`);
-            trackedPrices[url] = {
-              price: mostRecentPrice,
-              lastChecked: new Date().toISOString()
-            };
-          }
-        }
+        console.log(`Migrating old tracked item for ${url} without price data`);
+        trackedPrices.push({
+          date: new Date().toISOString().split('T')[0],
+          name: item.name || 'Unknown Product',
+          price: '0.00', // Default price since we don't have price data
+          url: url,
+          imageUrl: item.imageUrl || '',
+          lastChecked: new Date().toISOString()
+        });
       }
       
       // Save the updated trackedPrices to local storage
-      await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
-      console.log('Migration complete during refresh, all old items saved to local storage');
+      await browser.storage.local.set({ trackedPrices: trackedPrices });
+      
+      console.log('Migration complete during refresh, all old items saved to unified storage');
     }
     
-    if (Object.keys(trackedPrices).length === 0) {
+    if (trackedPrices.length === 0) {
       console.log('No tracked items found to check after refresh (checked all storage locations)');
       return;
     }
     
-    console.log(`Found ${Object.keys(trackedPrices).length} tracked items to check after extension refresh`);
+    // Get unique URLs for counting
+    const uniqueUrls = [...new Set(trackedPrices.map(entry => entry.url))];
+    console.log(`Found ${uniqueUrls.length} unique tracked items to check after extension refresh`);
     
     // Check all items regardless of when they were last checked
     await checkItemsOnStartup(trackedPrices);
@@ -816,8 +807,11 @@ async function checkItemsOnStartup(trackedPrices) {
       return;
     }
     
+    // Get latest prices per URL for checking
+    const latestPrices = getLatestPricePerUrl(trackedPrices);
+    
     // Check each URL
-    for (const [url, data] of Object.entries(trackedPrices)) {
+    for (const [url, latestEntry] of Object.entries(latestPrices)) {
       try {
         console.log(`Checking price for ${url} on startup`);
         
@@ -831,15 +825,15 @@ async function checkItemsOnStartup(trackedPrices) {
         if (!currentData || !currentData.price) {
           console.error(`Invalid data returned for ${url}:`, currentData);
           // Update last checked time even if we couldn't get a valid price
-          trackedPrices[url].lastChecked = new Date().toISOString();
+          updateLastChecked(trackedPrices, url, new Date().toISOString());
           continue; // Skip to the next URL
         }
         
         const currentPrice = currentData.price;
-        const oldPrice = data.price;
+        const oldPrice = latestEntry.price;
         
         // Update last checked time
-        trackedPrices[url].lastChecked = new Date().toISOString();
+        updateLastChecked(trackedPrices, url, new Date().toISOString());
         
         // Store price check in history (regardless of price change)
         await storePriceCheckHistory(url, currentData.name || 'Unknown Product', currentPrice);
@@ -848,14 +842,21 @@ async function checkItemsOnStartup(trackedPrices) {
         if (isPriceLower(currentPrice, oldPrice)) {
           console.log(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
           
-          // Update stored price
-          trackedPrices[url].price = currentPrice;
+          // Add new price entry to the array
+          trackedPrices.push({
+            date: new Date().toISOString().split('T')[0],
+            name: currentData.name || latestEntry.name || 'Unknown Product',
+            price: currentPrice,
+            url: url,
+            imageUrl: latestEntry.imageUrl || '',
+            lastChecked: new Date().toISOString()
+          });
           
           // Send notification
-          await sendPriceDropNotification(url, currentData.name, oldPrice, currentPrice);
+          await sendPriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
           
           // Store notification in history
-          await storePriceDropNotification(url, currentData.name, oldPrice, currentPrice);
+          await storePriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
         } else {
           console.log(`No price drop for ${url}, old: ${oldPrice}, current: ${currentPrice}`);
         }
@@ -870,7 +871,7 @@ async function checkItemsOnStartup(trackedPrices) {
     }
     
     // Save updated tracking data to local storage
-    await browser.storage.local.set({ [TRACKED_PRICES_STORAGE_KEY]: trackedPrices });
+    await browser.storage.local.set({ trackedPrices: trackedPrices });
     console.log('Updated tracking data saved to local storage after startup check');
     
   } catch (error) {

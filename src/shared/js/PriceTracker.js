@@ -309,7 +309,8 @@ class PriceTracker {
         name: response.name,
         price: response.price,
         url: url,
-        imageUrl: response.imageUrl
+        imageUrl: response.imageUrl,
+        lastChecked: new Date().toISOString()
       };
 
       this.trackedPrices.push(newEntry);
