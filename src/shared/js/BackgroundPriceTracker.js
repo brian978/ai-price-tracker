@@ -134,23 +134,35 @@ class BackgroundPriceTracker {
 
             Please extract the following information from the ${usingFallback ? 'URL' : 'page content'} above:
             - The normalized product name
-            - The current price (including currency symbol)
+            - The current price in a consistent format
 
-            For example if a product is called "Amazing Phone, Apple iPhone 13 Pro Max, 256 GB, lastest iOS" and the price is $1,000.00,
+            IMPORTANT: For the price, please format it as <number>,<decimals> where:
+            - Remove all thousands separators (dots, spaces, apostrophes)
+            - Use only a comma (,) as the decimal separator
+            - Include the currency symbol at the beginning
+
+            Examples of price formatting:
+            - If you find "$1,234.56" → format as "$1234,56"
+            - If you find "€2.345,99" → format as "€2345,99"
+            - If you find "1 234,50 Lei" → format as "1234,50 Lei"
+            - If you find "£3.456.789,12" → format as "£3456789,12"
+            - If you find "123.222.122" → format as "123222,122" (assuming last part is decimals)
+
+            For example, if a product is called "Amazing Phone, Apple iPhone 13 Pro Max, 256 GB, lastest iOS" and the price is $1,000.00,
             the extracted data should be:
-            { "name": "Apple iPhone 13 Pro Max, 256 GB", "price": "$1,000.00" }
+            { "name": "Apple iPhone 13 Pro Max, 256 GB", "price": "$1000,00" }
 
             Another example, if a product is called "Kärcher 2.863-089.0 Plastic Parking Station" and the price is $1,
             the extracted data should be:
-            { "name": "Kärcher Plastic Parking Station", "price": "$1" }
+            { "name": "Kärcher Plastic Parking Station", "price": "$1,00" }
 
             Last example, if a product is called "Insta360 Ace Pro 2 Double Battery Bundle - 8K Waterproof Action Camera Designed with Leica, 1/1.3 Inch Sensor, Dual AI Chip System, Leading Low Light Performance, Best Audio, Flip Screen & AI Editin" and the price is €100.99,
             then the extracted data should be:
-            { "name": "Insta360 Ace Pro 2 Double Battery Bundle", "price": "€100.99" }
+            { "name": "Insta360 Ace Pro 2 Double Battery Bundle", "price": "€100,99" }
 
             Return ONLY the JSON formatted string with these fields:
             - name: The product name
-            - price: The product price
+            - price: The product price (formatted as specified above)
           `;
 
       // Make request to OpenAI API
@@ -297,20 +309,13 @@ class BackgroundPriceTracker {
       const existingEntries = trackedPrices.filter(entry => entry.url === url);
       
       if (existingEntries.length === 0) {
-        // No existing entries, create a new one using data manager structure control
-        const newTrackedItem = this.dataManager.createTrackedPriceItem(url, productName, imageUrl);
-        // Add initial price to history
-        const initialHistoryEntry = this.dataManager.createPriceHistoryEntry(initialPrice);
-        newTrackedItem.history.push(initialHistoryEntry);
-        
-        trackedPrices.push(newTrackedItem);
+        // No existing entries, use data manager to add price to history
+        // This ensures proper price comparison logic is applied
+        await this.dataManager.addPriceToHistory(url, productName, initialPrice, imageUrl);
         this.logger.logSync(`Added new price tracking entry for ${url} with initial price ${initialPrice}`);
       } else {
         this.logger.logSync(`Price tracking already exists for ${url}`);
       }
-      
-      // Save using data manager
-      await this.dataManager.saveTrackedPrices(trackedPrices);
       this.logger.logSync(`Price tracking set up for ${url} with initial price ${initialPrice} (saved using data manager)`);
       
       // Make sure the alarm is set up
@@ -412,12 +417,15 @@ class BackgroundPriceTracker {
    * Compare prices to determine if there's a drop
    */
   isPriceLower(currentPrice, oldPrice) {
-    // Extract numeric values from price strings
+    // Extract numeric values from price strings in the consistent format <number>,<decimals>
     const extractNumeric = (priceStr) => {
-      const matches = priceStr.match(/[\d,.]+/);
-      if (matches && matches.length > 0) {
-        // Replace commas with dots and parse as float
-        return parseFloat(matches[0].replace(/,/g, '.').replace(/[^\d.]/g, ''));
+      if (!priceStr) return 0;
+      // Remove currency symbols and extract the numeric part
+      // Expected format: "€1234,56" or "$1000,00" etc.
+      const numericPart = priceStr.replace(/[^\d,]/g, '');
+      if (numericPart) {
+        // Replace comma with dot for parseFloat (since LLM uses comma as decimal separator)
+        return parseFloat(numericPart.replace(',', '.'));
       }
       return 0;
     };
@@ -449,16 +457,38 @@ class BackgroundPriceTracker {
   getLatestPricePerUrl(trackedPrices) {
     const latestPrices = {};
     
-    // Group entries by URL and find the most recent one for each
-    for (const entry of trackedPrices) {
-      if (!entry.url || !entry.price) continue;
-      
-      if (!latestPrices[entry.url] || 
-          new Date(entry.date) > new Date(latestPrices[entry.url].date)) {
-        latestPrices[entry.url] = entry;
+    this.logger.logSync(`Processing ${trackedPrices.length} tracked items for latest prices`);
+    
+    // Process each tracked item (new data structure with history array)
+    for (const item of trackedPrices) {
+      if (!item.url || !item.history || !Array.isArray(item.history) || item.history.length === 0) {
+        this.logger.logSync(`Skipping item due to missing data: url=${!!item.url}, history=${!!item.history}, historyLength=${item.history?.length || 0}`);
+        continue;
       }
+      
+      // Find the most recent price entry in the history
+      const latestHistoryEntry = item.history.reduce((latest, current) => {
+        const latestDate = new Date(latest.timestamp || latest.date);
+        const currentDate = new Date(current.timestamp || current.date);
+        return currentDate > latestDate ? current : latest;
+      });
+      
+      // Create a combined entry with item info and latest price
+      const combinedEntry = {
+        url: item.url,
+        name: item.name,
+        imageUrl: item.imageUrl,
+        lastChecked: item.lastChecked,
+        price: latestHistoryEntry.price,
+        date: latestHistoryEntry.date,
+        timestamp: latestHistoryEntry.timestamp
+      };
+      
+      this.logger.logSync(`Added latest price for ${item.url}: ${latestHistoryEntry.price}`);
+      latestPrices[item.url] = combinedEntry;
     }
     
+    this.logger.logSync(`Found ${Object.keys(latestPrices).length} items with valid price data`);
     return latestPrices;
   }
 

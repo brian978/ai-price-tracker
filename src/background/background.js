@@ -3,7 +3,7 @@
 
 // Create global instances
 const dataManager = new PriceDataManager();
-const logger = new Logger();
+// Note: logger is already created globally in Logger.js
 const viewModeManager = new ViewModeManager(logger);
 const notificationManager = new NotificationManager(logger);
 const priceTracker = new BackgroundPriceTracker(dataManager, logger, notificationManager);
@@ -43,6 +43,19 @@ browser.storage.onChanged.addListener(async (changes, areaName) => {
         // Disable scheduled checks
         await priceCheckScheduler.disableScheduledChecks();
         await logger.log('Price tracking alarm disabled via settings change');
+      }
+    }
+    
+    // Handle check interval changes
+    if (changes.checkInterval !== undefined) {
+      const result = await browser.storage.local.get(['priceAlarmEnabled']);
+      const priceAlarmEnabled = result.priceAlarmEnabled === true;
+      
+      if (priceAlarmEnabled) {
+        // Restart the alarm with the new interval
+        await priceCheckScheduler.disableScheduledChecks();
+        await priceCheckScheduler.enableScheduledChecks();
+        await logger.log(`Check interval updated to ${changes.checkInterval.newValue} minutes`);
       }
     }
   }

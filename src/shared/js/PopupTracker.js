@@ -11,8 +11,6 @@ class PopupTracker extends PriceTracker {
    * Initialize the popup tracker
    */
   static async init() {
-    const tracker = new PopupTracker();
-    await tracker.initialize();
-    return tracker;
+    return await super.init(PopupTracker);
   }
 }

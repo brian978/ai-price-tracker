@@ -34,7 +34,7 @@ function loadOptions() {
       }
       
       // Get other settings from local storage
-      return browser.storage.local.get(['viewMode', 'priceAlarmEnabled']);
+      return browser.storage.local.get(['viewMode', 'priceAlarmEnabled', 'checkInterval']);
     })
     .then(syncResult => {
       if (syncResult.viewMode) {
@@ -47,6 +47,10 @@ function loadOptions() {
       // Set price alarm checkbox (default to off if not set)
       const priceAlarmCheckbox = document.getElementById('price-alarm-enabled');
       priceAlarmCheckbox.checked = syncResult.priceAlarmEnabled === true;
+      
+      // Set check interval (default to 60 minutes if not set)
+      const checkIntervalInput = document.getElementById('check-interval');
+      checkIntervalInput.value = syncResult.checkInterval || 60;
       
       // Load alarm timing information
       loadAlarmTimingInfo();
@@ -84,39 +88,33 @@ function toggleApiKeyVisibility() {
   }
 }
 
-// Display status message
+// Status message functions - delegating to StatusMessageManager
 function showStatusMessage(message, type) {
-  const statusElement = document.getElementById('status-message');
-  statusElement.textContent = message;
-  statusElement.className = type;
-
-  // Clear the message after 3 seconds
-  setTimeout(() => {
-    statusElement.className = '';
-    statusElement.textContent = '';
-  }, 3000);
+  StatusMessageManager.showStatusMessage(message, type);
 }
 
-// Display view mode status message
 function showViewStatusMessage(message, type) {
-  const statusElement = document.getElementById('view-status-message');
-  statusElement.textContent = message;
-  statusElement.className = type;
-
-  // Clear the message after 5 seconds (longer for reload instruction)
-  setTimeout(() => {
-    statusElement.className = '';
-    statusElement.textContent = '';
-  }, 5000);
+  StatusMessageManager.showViewStatusMessage(message, type);
 }
 
 // Save the price alarm setting
 function savePriceAlarmSetting() {
   const priceAlarmEnabled = document.getElementById('price-alarm-enabled').checked;
+  const checkIntervalInput = document.getElementById('check-interval');
+  const checkInterval = parseInt(checkIntervalInput.value);
 
-  browser.storage.local.set({ priceAlarmEnabled: priceAlarmEnabled })
+  // Validate check interval
+  if (isNaN(checkInterval) || checkInterval < 1 || checkInterval > 1440) {
+    showAlarmStatusMessage('Check interval must be between 1 and 1440 minutes.', 'error');
+    return;
+  }
+
+  browser.storage.local.set({ 
+    priceAlarmEnabled: priceAlarmEnabled,
+    checkInterval: checkInterval
+  })
     .then(() => {
-      showAlarmStatusMessage(`Price alarm ${priceAlarmEnabled ? 'enabled' : 'disabled'} successfully!`, 'success');
+      showAlarmStatusMessage(`Price alarm ${priceAlarmEnabled ? 'enabled' : 'disabled'} successfully! Check interval set to ${checkInterval} minutes.`, 'success');
       // Update timing info after saving
       loadAlarmTimingInfo();
     })
@@ -131,7 +129,7 @@ async function loadAlarmTimingInfo() {
   try {
     // Create scheduler instance for getting timing info
     const dataManager = new PriceDataManager();
-    const logger = new Logger();
+    // Note: logger is already created globally in Logger.js
     const scheduler = new PriceCheckScheduler(dataManager, logger);
     
     // Get last check time
@@ -198,30 +196,12 @@ function formatDateTime(date) {
   }
 }
 
-// Display alarm status message
 function showAlarmStatusMessage(message, type) {
-  const statusElement = document.getElementById('alarm-status-message');
-  statusElement.textContent = message;
-  statusElement.className = type;
-
-  // Clear the message after 3 seconds
-  setTimeout(() => {
-    statusElement.className = '';
-    statusElement.textContent = '';
-  }, 3000);
+  StatusMessageManager.showAlarmStatusMessage(message, type);
 }
 
-// Display clear history status message
 function showClearStatusMessage(message, type) {
-  const statusElement = document.getElementById('clear-status-message');
-  statusElement.textContent = message;
-  statusElement.className = type;
-
-  // Clear the message after 3 seconds
-  setTimeout(() => {
-    statusElement.className = '';
-    statusElement.textContent = '';
-  }, 3000);
+  StatusMessageManager.showClearStatusMessage(message, type);
 }
 
 // Clear price check history only (NOT tracked items)

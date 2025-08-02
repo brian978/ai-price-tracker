@@ -75,10 +75,14 @@ class PriceCheckScheduler {
    */
   async enableScheduledChecks() {
     try {
+      // Get the check interval from storage, default to 60 minutes if not set
+      const result = await browser.storage.local.get(['checkInterval']);
+      const checkInterval = result.checkInterval || 60;
+      
       await browser.alarms.create(this.PRICE_CHECK_ALARM_NAME, {
-        periodInMinutes: 60 // Check once per hour
+        periodInMinutes: checkInterval
       });
-      this.logger.logSync('Price tracking alarm created - automatic checking enabled');
+      this.logger.logSync(`Price tracking alarm created - automatic checking enabled with ${checkInterval} minute interval`);
     } catch (error) {
       this.logger.errorSync('Error creating price check alarm:', error);
     }

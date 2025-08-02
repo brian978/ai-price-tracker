@@ -11,8 +11,6 @@ class SidebarTracker extends PriceTracker {
    * Initialize the sidebar tracker
    */
   static async init() {
-    const tracker = new SidebarTracker();
-    await tracker.initialize();
-    return tracker;
+    return await super.init(SidebarTracker);
   }
 }
