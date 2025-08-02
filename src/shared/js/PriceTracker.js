@@ -12,6 +12,15 @@ class PriceTracker {
   }
 
   /**
+   * Static factory method to create and initialize a tracker instance
+   */
+  static async init(TrackerClass) {
+    const tracker = new TrackerClass();
+    await tracker.initialize();
+    return tracker;
+  }
+
+  /**
    * Initialize the price tracker
    */
   async initialize() {

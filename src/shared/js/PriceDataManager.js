@@ -139,6 +139,9 @@ class PriceDataManager {
   async saveTrackedPrices(trackedPrices) {
     try {
       const validatedData = this._validateTrackedPricesArray(trackedPrices);
+
+      logger.logSync('Saving tracked prices:', validatedData);
+
       await browser.storage.local.set({ [this.storageKeys.TRACKED_PRICES]: validatedData });
       return true;
     } catch (error) {
@@ -285,9 +288,11 @@ class PriceDataManager {
         }
       }
       
-      // Check if price is different from the last recorded price
+      // Check if price is different from the last recorded price using numeric comparison
       const lastHistoryEntry = trackedItem.history[trackedItem.history.length - 1];
-      if (!lastHistoryEntry || lastHistoryEntry.price !== price) {
+      const shouldAddPrice = this._shouldAddPriceToHistory(lastHistoryEntry?.price, price);
+      
+      if (shouldAddPrice) {
         // Add new price to history using structure creation method
         const newHistoryEntry = this.createPriceHistoryEntry(price);
         trackedItem.history.push(newHistoryEntry);
@@ -304,6 +309,45 @@ class PriceDataManager {
       logger.errorSync('Error adding price to history:', error);
       return false;
     }
+  }
+
+  /**
+   * Determine if a new price should be added to history based on numeric comparison
+   * @param {string|number} lastPrice - The last recorded price
+   * @param {string|number} newPrice - The new price to compare
+   * @returns {boolean} True if the price should be added to history
+   * @private
+   */
+  _shouldAddPriceToHistory(lastPrice, newPrice) {
+    logger.logSync("Last price: ", lastPrice);
+    logger.logSync("New price: ", newPrice);
+
+    // If there's no last price, always add the new price
+    if (!lastPrice) {
+      return true;
+    }
+
+    // Extract numeric values from price strings in the consistent format <number>,<decimals>
+    const extractNumeric = (priceStr) => {
+      if (!priceStr) return 0;
+      const priceString = String(priceStr);
+      // Remove currency symbols and extract the numeric part
+      // Expected format: "€1234,56" or "$1000,00" etc.
+      const numericPart = priceString.replace(/[^\d,]/g, '');
+      if (numericPart) {
+        // Replace comma with dot for parseFloat (since LLM uses comma as decimal separator)
+        return parseFloat(numericPart.replace(',', '.'));
+      }
+      return 0;
+    };
+
+    const lastNumeric = extractNumeric(lastPrice);
+    const newNumeric = extractNumeric(newPrice);
+
+
+
+    // Return true if prices are numerically different
+    return lastNumeric !== newNumeric;
   }
 
   /**

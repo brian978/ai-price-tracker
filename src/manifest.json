@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "AI Price Tracker",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Track prices using OpenAI API",
   "icons": {
     "48": "icons/icon-48.png",
@@ -34,7 +34,15 @@
     "open_in_tab": true
   },
   "background": {
-    "scripts": ["shared/js/Logger.js", "shared/js/PriceDataManager.js", "background/background.js"],
+    "scripts": [
+      "shared/js/Logger.js", 
+      "shared/js/PriceDataManager.js", 
+      "shared/js/ViewModeManager.js",
+      "shared/js/NotificationManager.js",
+      "shared/js/BackgroundPriceTracker.js",
+      "shared/js/PriceCheckScheduler.js",
+      "background/background.js"
+    ],
     "persistent": false
   },
   "browser_specific_settings": {

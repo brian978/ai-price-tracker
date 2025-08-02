@@ -34,7 +34,7 @@ function loadOptions() {
       }
       
       // Get other settings from local storage
-      return browser.storage.local.get(['viewMode', 'priceAlarmEnabled']);
+      return browser.storage.local.get(['viewMode', 'priceAlarmEnabled', 'checkInterval']);
     })
     .then(syncResult => {
       if (syncResult.viewMode) {
@@ -47,6 +47,13 @@ function loadOptions() {
       // Set price alarm checkbox (default to off if not set)
       const priceAlarmCheckbox = document.getElementById('price-alarm-enabled');
       priceAlarmCheckbox.checked = syncResult.priceAlarmEnabled === true;
+      
+      // Set check interval (default to 60 minutes if not set)
+      const checkIntervalInput = document.getElementById('check-interval');
+      checkIntervalInput.value = syncResult.checkInterval || 60;
+      
+      // Load alarm timing information
+      loadAlarmTimingInfo();
     })
     .catch(error => {
       logger.errorSync('Error loading options:', error);
@@ -81,39 +88,35 @@ function toggleApiKeyVisibility() {
   }
 }
 
-// Display status message
+// Status message functions - delegating to StatusMessageManager
 function showStatusMessage(message, type) {
-  const statusElement = document.getElementById('status-message');
-  statusElement.textContent = message;
-  statusElement.className = type;
-
-  // Clear the message after 3 seconds
-  setTimeout(() => {
-    statusElement.className = '';
-    statusElement.textContent = '';
-  }, 3000);
+  StatusMessageManager.showStatusMessage(message, type);
 }
 
-// Display view mode status message
 function showViewStatusMessage(message, type) {
-  const statusElement = document.getElementById('view-status-message');
-  statusElement.textContent = message;
-  statusElement.className = type;
-
-  // Clear the message after 5 seconds (longer for reload instruction)
-  setTimeout(() => {
-    statusElement.className = '';
-    statusElement.textContent = '';
-  }, 5000);
+  StatusMessageManager.showViewStatusMessage(message, type);
 }
 
 // Save the price alarm setting
 function savePriceAlarmSetting() {
   const priceAlarmEnabled = document.getElementById('price-alarm-enabled').checked;
+  const checkIntervalInput = document.getElementById('check-interval');
+  const checkInterval = parseInt(checkIntervalInput.value);
 
-  browser.storage.local.set({ priceAlarmEnabled: priceAlarmEnabled })
+  // Validate check interval
+  if (isNaN(checkInterval) || checkInterval < 1 || checkInterval > 1440) {
+    showAlarmStatusMessage('Check interval must be between 1 and 1440 minutes.', 'error');
+    return;
+  }
+
+  browser.storage.local.set({ 
+    priceAlarmEnabled: priceAlarmEnabled,
+    checkInterval: checkInterval
+  })
     .then(() => {
-      showAlarmStatusMessage(`Price alarm ${priceAlarmEnabled ? 'enabled' : 'disabled'} successfully!`, 'success');
+      showAlarmStatusMessage(`Price alarm ${priceAlarmEnabled ? 'enabled' : 'disabled'} successfully! Check interval set to ${checkInterval} minutes.`, 'success');
+      // Update timing info after saving
+      loadAlarmTimingInfo();
     })
     .catch(error => {
       logger.errorSync('Error saving price alarm setting:', error);
@@ -121,30 +124,72 @@ function savePriceAlarmSetting() {
     });
 }
 
-// Display alarm status message
-function showAlarmStatusMessage(message, type) {
-  const statusElement = document.getElementById('alarm-status-message');
-  statusElement.textContent = message;
-  statusElement.className = type;
-
-  // Clear the message after 3 seconds
-  setTimeout(() => {
-    statusElement.className = '';
-    statusElement.textContent = '';
-  }, 3000);
+// Load and display alarm timing information using PriceCheckScheduler
+async function loadAlarmTimingInfo() {
+  try {
+    // Create scheduler instance for getting timing info
+    const dataManager = new PriceDataManager();
+    // Note: logger is already created globally in Logger.js
+    const scheduler = new PriceCheckScheduler(dataManager, logger);
+    
+    // Get last check time
+    const lastCheckTime = await scheduler.getLastCheckTime();
+    const lastCheckElement = document.getElementById('last-check-value');
+    if (lastCheckTime) {
+      lastCheckElement.textContent = formatDateTime(lastCheckTime);
+    } else {
+      lastCheckElement.textContent = 'Never';
+    }
+    
+    // Get next check time
+    const nextCheckTime = await scheduler.getNextCheckTime();
+    const nextCheckElement = document.getElementById('next-check-value');
+    const isEnabled = await scheduler.isPriceTrackingEnabled();
+    
+    if (nextCheckTime) {
+      nextCheckElement.textContent = formatDateTime(nextCheckTime);
+    } else if (isEnabled) {
+      nextCheckElement.textContent = 'Within the next hour';
+    } else {
+      nextCheckElement.textContent = 'Not scheduled (alarm disabled)';
+    }
+  } catch (error) {
+    logger.errorSync('Error loading alarm timing info:', error);
+    document.getElementById('last-check-value').textContent = 'Error loading';
+    document.getElementById('next-check-value').textContent = 'Error loading';
+  }
 }
 
-// Display clear history status message
-function showClearStatusMessage(message, type) {
-  const statusElement = document.getElementById('clear-status-message');
-  statusElement.textContent = message;
-  statusElement.className = type;
+// Format date and time for display
+function formatDateTime(date) {
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const futureHours = Math.abs(Math.floor(diffMs / (1000 * 60 * 60)));
+  
+  // For future dates (next check) - keep relative time format
+  if (diffMs < 0) {
+    const futureMins = Math.abs(diffMins);
+    
+    if (futureMins < 60) {
+      return `in ${futureMins} minute${futureMins !== 1 ? 's' : ''}`;
+    } else if (futureHours < 24) {
+      return `in ${futureHours} hour${futureHours !== 1 ? 's' : ''}`;
+    } else {
+      return date.toLocaleString();
+    }
+  }
+  
+  // For past dates (last check) - always show exact date and time
+  return date.toLocaleString();
+}
 
-  // Clear the message after 3 seconds
-  setTimeout(() => {
-    statusElement.className = '';
-    statusElement.textContent = '';
-  }, 3000);
+function showAlarmStatusMessage(message, type) {
+  StatusMessageManager.showAlarmStatusMessage(message, type);
+}
+
+function showClearStatusMessage(message, type) {
+  StatusMessageManager.showClearStatusMessage(message, type);
 }
 
 // Clear price check history only (NOT tracked items)
@@ -193,7 +238,7 @@ function clearPriceDropHistory() {
   if (confirmed) {
     // Clear only the tracked prices for alarm
     browser.storage.local.set({
-      priceDropHistory: {}
+      priceDropHistory: []
     })
     .then(() => {
       showClearStatusMessage('Tracked prices for alarm cleared successfully!', 'success');
@@ -316,6 +361,11 @@ function displayPriceDropHistory(history) {
   const tableBody = document.getElementById('drop-history-table-body');
   const emptyHistory = document.getElementById('empty-drop-history');
   const historyTable = document.getElementById('drop-history-table');
+  
+  // Ensure history is always an array
+  if (!Array.isArray(history)) {
+    history = [];
+  }
   
   // Clear existing table rows
   tableBody.innerHTML = '';
