@@ -139,6 +139,9 @@ class PriceDataManager {
   async saveTrackedPrices(trackedPrices) {
     try {
       const validatedData = this._validateTrackedPricesArray(trackedPrices);
+
+      logger.logSync('Saving tracked prices:', validatedData);
+
       await browser.storage.local.set({ [this.storageKeys.TRACKED_PRICES]: validatedData });
       return true;
     } catch (error) {
@@ -316,6 +319,9 @@ class PriceDataManager {
    * @private
    */
   _shouldAddPriceToHistory(lastPrice, newPrice) {
+    logger.logSync("Last price: ", lastPrice);
+    logger.logSync("New price: ", newPrice);
+
     // If there's no last price, always add the new price
     if (!lastPrice) {
       return true;
@@ -337,6 +343,8 @@ class PriceDataManager {
 
     const lastNumeric = extractNumeric(lastPrice);
     const newNumeric = extractNumeric(newPrice);
+
+
 
     // Return true if prices are numerically different
     return lastNumeric !== newNumeric;

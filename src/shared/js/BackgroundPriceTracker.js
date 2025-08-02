@@ -316,24 +316,11 @@ class BackgroundPriceTracker {
    */
   async setupPriceTracking(url, initialPrice, productName = 'Unknown Product', imageUrl = '') {
     try {
-      // Get currently tracked prices from local storage
-      const result = await browser.storage.local.get('trackedPrices');
-      this.logger.logSync('Successfully retrieved tracked prices from local storage');
+      // Note: Price data is already saved by the frontend PriceTracker.trackPrice() method
+      // via dataManager.addPriceToHistory(), so we don't need to save it again here
+      // to avoid race conditions and duplicate storage operations
       
-      const trackedPrices = result.trackedPrices || [];
-      
-      // Check if we already have entries for this URL
-      const existingEntries = trackedPrices.filter(entry => entry.url === url);
-      
-      if (existingEntries.length === 0) {
-        // No existing entries, use data manager to add price to history
-        // This ensures proper price comparison logic is applied
-        await this.dataManager.addPriceToHistory(url, productName, initialPrice, imageUrl);
-        this.logger.logSync(`Added new price tracking entry for ${url} with initial price ${initialPrice}`);
-      } else {
-        this.logger.logSync(`Price tracking already exists for ${url}`);
-      }
-      this.logger.logSync(`Price tracking set up for ${url} with initial price ${initialPrice} (saved using data manager)`);
+      this.logger.logSync(`Price tracking set up for ${url} with initial price ${initialPrice} (data already saved by frontend)`);
       
       // Make sure the alarm is set up
       const alarms = await browser.alarms.getAll();
@@ -611,9 +598,10 @@ class BackgroundPriceTracker {
         }
       }
       
-      // Save updated tracking data using data manager
-      await this.dataManager.saveTrackedPrices(trackedPrices);
-      this.logger.logSync('Updated tracking data saved using data manager after startup check');
+      // Note: No need to save trackedPrices here as storePriceInTrackedHistory() 
+      // already saves updated data via dataManager.addPriceToHistory()
+      // Saving the stale trackedPrices parameter would overwrite fresh data
+      this.logger.logSync('Startup check completed - data already saved by individual price updates');
       
     } catch (error) {
       this.logger.errorSync('Error checking prices on startup:', error);
