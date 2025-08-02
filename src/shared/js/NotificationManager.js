@@ -55,7 +55,12 @@ class NotificationManager {
     try {
       // Get existing notification history from local storage
       const result = await browser.storage.local.get('priceDropHistory');
-      const history = result.priceDropHistory || [];
+      let history = result.priceDropHistory || [];
+
+      // Ensure history is always an array
+      if (!Array.isArray(history)) {
+        history = [];
+      }
 
       // Add new notification to history
       history.push({

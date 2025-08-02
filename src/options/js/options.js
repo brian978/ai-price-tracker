@@ -238,7 +238,7 @@ function clearPriceDropHistory() {
   if (confirmed) {
     // Clear only the tracked prices for alarm
     browser.storage.local.set({
-      priceDropHistory: {}
+      priceDropHistory: []
     })
     .then(() => {
       showClearStatusMessage('Tracked prices for alarm cleared successfully!', 'success');
@@ -361,6 +361,11 @@ function displayPriceDropHistory(history) {
   const tableBody = document.getElementById('drop-history-table-body');
   const emptyHistory = document.getElementById('empty-drop-history');
   const historyTable = document.getElementById('drop-history-table');
+  
+  // Ensure history is always an array
+  if (!Array.isArray(history)) {
+    history = [];
+  }
   
   // Clear existing table rows
   tableBody.innerHTML = '';
