@@ -126,58 +126,40 @@ function savePriceAlarmSetting() {
     });
 }
 
-// Load and display alarm timing information
-function loadAlarmTimingInfo() {
-  Promise.all([
-    browser.storage.local.get(['priceAlarmEnabled', 'trackedPrices']),
-    browser.alarms.getAll()
-  ])
-    .then(([storageResult, alarms]) => {
-      const priceAlarmEnabled = storageResult.priceAlarmEnabled === true;
-      const trackedPrices = storageResult.trackedPrices || [];
-      
-      // Find the price check alarm
-      const priceAlarm = alarms.find(alarm => alarm.name === 'priceCheckAlarm');
-      
-      // Calculate last check time
-      let lastCheckTime = null;
-      if (trackedPrices.length > 0) {
-        // Find the most recent lastChecked timestamp across all tracked items
-        const lastCheckedTimes = trackedPrices
-          .map(item => item.lastChecked)
-          .filter(time => time)
-          .map(time => new Date(time))
-          .sort((a, b) => b - a);
-        
-        if (lastCheckedTimes.length > 0) {
-          lastCheckTime = lastCheckedTimes[0];
-        }
-      }
-      
-      // Update last check display
-      const lastCheckElement = document.getElementById('last-check-value');
-      if (lastCheckTime) {
-        lastCheckElement.textContent = formatDateTime(lastCheckTime);
-      } else {
-        lastCheckElement.textContent = 'Never';
-      }
-      
-      // Update next check display
-      const nextCheckElement = document.getElementById('next-check-value');
-      if (priceAlarmEnabled && priceAlarm && priceAlarm.scheduledTime) {
-        const nextCheckTime = new Date(priceAlarm.scheduledTime);
-        nextCheckElement.textContent = formatDateTime(nextCheckTime);
-      } else if (priceAlarmEnabled) {
-        nextCheckElement.textContent = 'Within the next hour';
-      } else {
-        nextCheckElement.textContent = 'Not scheduled (alarm disabled)';
-      }
-    })
-    .catch(error => {
-      logger.errorSync('Error loading alarm timing info:', error);
-      document.getElementById('last-check-value').textContent = 'Error loading';
-      document.getElementById('next-check-value').textContent = 'Error loading';
-    });
+// Load and display alarm timing information using PriceCheckScheduler
+async function loadAlarmTimingInfo() {
+  try {
+    // Create scheduler instance for getting timing info
+    const dataManager = new PriceDataManager();
+    const logger = new Logger();
+    const scheduler = new PriceCheckScheduler(dataManager, logger);
+    
+    // Get last check time
+    const lastCheckTime = await scheduler.getLastCheckTime();
+    const lastCheckElement = document.getElementById('last-check-value');
+    if (lastCheckTime) {
+      lastCheckElement.textContent = formatDateTime(lastCheckTime);
+    } else {
+      lastCheckElement.textContent = 'Never';
+    }
+    
+    // Get next check time
+    const nextCheckTime = await scheduler.getNextCheckTime();
+    const nextCheckElement = document.getElementById('next-check-value');
+    const isEnabled = await scheduler.isPriceTrackingEnabled();
+    
+    if (nextCheckTime) {
+      nextCheckElement.textContent = formatDateTime(nextCheckTime);
+    } else if (isEnabled) {
+      nextCheckElement.textContent = 'Within the next hour';
+    } else {
+      nextCheckElement.textContent = 'Not scheduled (alarm disabled)';
+    }
+  } catch (error) {
+    logger.errorSync('Error loading alarm timing info:', error);
+    document.getElementById('last-check-value').textContent = 'Error loading';
+    document.getElementById('next-check-value').textContent = 'Error loading';
+  }
 }
 
 // Format date and time for display

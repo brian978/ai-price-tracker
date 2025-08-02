@@ -34,7 +34,15 @@
     "open_in_tab": true
   },
   "background": {
-    "scripts": ["shared/js/Logger.js", "shared/js/PriceDataManager.js", "background/background.js"],
+    "scripts": [
+      "shared/js/Logger.js", 
+      "shared/js/PriceDataManager.js", 
+      "shared/js/ViewModeManager.js",
+      "shared/js/NotificationManager.js",
+      "shared/js/BackgroundPriceTracker.js",
+      "shared/js/PriceCheckScheduler.js",
+      "background/background.js"
+    ],
     "persistent": false
   },
   "browser_specific_settings": {
