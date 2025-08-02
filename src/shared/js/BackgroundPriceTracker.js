@@ -405,8 +405,7 @@ class BackgroundPriceTracker {
         }
       }
       
-      // Save updated tracking data using data manager
-      await this.dataManager.saveTrackedPrices(trackedPrices);
+      // Note: No need to save trackedPrices here as addPriceToHistory already saves updated data
       
     } catch (error) {
       this.logger.errorSync('Error checking prices:', error);
@@ -460,10 +459,42 @@ class BackgroundPriceTracker {
     this.logger.logSync(`Processing ${trackedPrices.length} tracked items for latest prices`);
     
     // Process each tracked item (new data structure with history array)
-    for (const item of trackedPrices) {
-      if (!item.url || !item.history || !Array.isArray(item.history) || item.history.length === 0) {
-        this.logger.logSync(`Skipping item due to missing data: url=${!!item.url}, history=${!!item.history}, historyLength=${item.history?.length || 0}`);
+    for (let item of trackedPrices) {
+      if (!item.url) {
+        this.logger.logSync(`Skipping item due to missing URL: url=${!!item.url}`);
         continue;
+      }
+      
+      // If history is missing or empty, normalize the item to create proper structure
+      if (!item.history || !Array.isArray(item.history) || item.history.length === 0) {
+        this.logger.logSync(`Item has missing or empty history, normalizing: url=${item.url}, historyLength=${item.history?.length || 0}`);
+
+        try {
+          // Use data manager to normalize the item and ensure proper structure
+          item = this.dataManager._validateTrackedPriceItem(item);
+          // If still no history after normalization, this is a first-time item that needs its initial price
+          if (!item.history || item.history.length === 0) {
+            this.logger.logSync(`Item has empty history after normalization, will fetch initial price: ${item.url}`);
+            // Create a special entry for first-time items with no price history
+            const firstTimeEntry = {
+              url: item.url,
+              name: item.name,
+              imageUrl: item.imageUrl,
+              lastChecked: item.lastChecked,
+              price: null, // No previous price to compare against
+              date: null,
+              timestamp: null,
+              isFirstTime: true // Flag to indicate this needs initial price fetch
+            };
+            
+            this.logger.logSync(`Added first-time item for price checking: ${item.url}`);
+            latestPrices[item.url] = firstTimeEntry;
+            continue;
+          }
+        } catch (error) {
+          this.logger.errorSync(`Error normalizing item ${item.url}:`, error);
+          continue;
+        }
       }
       
       // Find the most recent price entry in the history
@@ -536,17 +567,22 @@ class BackgroundPriceTracker {
           // Store price in tracked history (only if different from last price)
           await this.storePriceInTrackedHistory(trackedPrices, url, currentData.name || 'Unknown Product', currentPrice, latestEntry.imageUrl || '');
           
-          // Compare prices
-          if (this.isPriceLower(currentPrice, oldPrice)) {
-            this.logger.logSync(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
-            
-            // Send notification
-            await this.notificationManager.sendPriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
-            
-            // Store notification in history
-            await this.notificationManager.storePriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
+          // Handle first-time items vs items with existing price history
+          if (latestEntry.isFirstTime) {
+            this.logger.logSync(`First price recorded for ${url}: ${currentPrice}`);
           } else {
-            this.logger.logSync(`No price drop for ${url}, old: ${oldPrice}, current: ${currentPrice}`);
+            // Compare prices only for items with existing price history
+            if (this.isPriceLower(currentPrice, oldPrice)) {
+              this.logger.logSync(`Price dropped for ${url} from ${oldPrice} to ${currentPrice}`);
+              
+              // Send notification
+              await this.notificationManager.sendPriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
+              
+              // Store notification in history
+              await this.notificationManager.storePriceDropNotification(url, currentData.name || latestEntry.name, oldPrice, currentPrice);
+            } else {
+              this.logger.logSync(`No price drop for ${url}, old: ${oldPrice}, current: ${currentPrice}`);
+            }
           }
         } catch (error) {
           this.logger.errorSync(`Error checking price for ${url} on startup:`, error);

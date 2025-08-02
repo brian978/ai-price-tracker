@@ -165,13 +165,11 @@ function formatDateTime(date) {
   const now = new Date();
   const diffMs = now - date;
   const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const futureHours = Math.abs(Math.floor(diffMs / (1000 * 60 * 60)));
   
-  // For future dates (next check)
+  // For future dates (next check) - keep relative time format
   if (diffMs < 0) {
     const futureMins = Math.abs(diffMins);
-    const futureHours = Math.abs(diffHours);
     
     if (futureMins < 60) {
       return `in ${futureMins} minute${futureMins !== 1 ? 's' : ''}`;
@@ -182,18 +180,8 @@ function formatDateTime(date) {
     }
   }
   
-  // For past dates (last check)
-  if (diffMins < 1) {
-    return 'Just now';
-  } else if (diffMins < 60) {
-    return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-  } else if (diffHours < 24) {
-    return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-  } else if (diffDays < 7) {
-    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-  } else {
-    return date.toLocaleString();
-  }
+  // For past dates (last check) - always show exact date and time
+  return date.toLocaleString();
 }
 
 function showAlarmStatusMessage(message, type) {
