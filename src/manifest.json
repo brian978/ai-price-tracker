@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "AI Price Tracker",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Track prices using OpenAI API",
   "icons": {
     "48": "icons/icon-48.png",

@@ -40,14 +40,13 @@ class PriceCheckScheduler {
       
       // BROWSER RESTART HANDLING:
       // Since browser alarms don't run when the browser is closed, we need to check
-      // if any products should have been checked while the browser was closed.
-      // This ensures that even if a user opens their browser for short periods,
-      // price checks will still happen at roughly hourly intervals.
-      const urlsNeedingCheck = this.getUrlsNeedingCheck(trackedPrices, 1);
+      // all tracked items when the browser starts up to ensure users get fresh data.
+      // This ensures that all tracked items are checked regardless of timing.
+      const urlsNeedingCheck = trackedPrices.map(item => item.url);
       
       if (urlsNeedingCheck.length > 0) {
-        this.logger.logSync(`Found ${urlsNeedingCheck.length} products that need checking:`, urlsNeedingCheck);
-        this.logger.logSync('Some products need to be checked (never checked or not checked in over an hour), performing immediate check');
+        this.logger.logSync(`Found ${urlsNeedingCheck.length} tracked products to check on startup:`, urlsNeedingCheck);
+        this.logger.logSync('Checking all tracked items on startup to ensure fresh data');
         // Use setTimeout to allow the extension to fully initialize first
         setTimeout(() => this.checkItemsOnStartup(trackedPrices), 5000);
       }

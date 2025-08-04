@@ -63,10 +63,10 @@ browser.storage.onChanged.addListener(async (changes, areaName) => {
 
 browser.runtime.onInstalled.addListener((details) => {
   // Initialize view mode
-  viewModeManager.initializeViewMode();
+  viewModeManager.initializeViewMode().then(r => "View mode initialized");
   
   // Initialize price tracking scheduler
-  priceCheckScheduler.initialize();
+  priceCheckScheduler.initialize().then(r => "Price checker initialized");
   
   // When the extension is refreshed/updated, check all tracked items immediately
   if (details.reason === 'update' || details.reason === 'install') {
