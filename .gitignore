@@ -8,3 +8,4 @@
 # Build and distribution
 dist/*
 .amo-upload-uuid
+node_modules/

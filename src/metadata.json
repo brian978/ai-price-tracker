@@ -1,12 +1,14 @@
 {
   "categories": {
-    "firefox": ["shopping"]
+    "firefox": [
+      "shopping"
+    ]
   },
   "summary": {
     "en-US": "Track prices using OpenAI API"
   },
   "description": {
-    "en-US": "A powerful Firefox extension that uses OpenAI's API to automatically track and monitor product prices from any e-commerce website. Features include price history tracking, cross-device synchronization, and both popup and sidebar viewing modes."
+    "en-US": "AI-powered price tracker extension for Firefox that automatically monitors product prices across all e-commerce websites using OpenAI's advanced API.\n\nKey Features:\n• Intelligent price extraction from any website\n• Automated scheduled price checks with customizable intervals\n• Instant browser notifications for price drops\n• Dual viewing modes (popup and sidebar)\n\nPerfect for online shopping, deal hunting, price comparison, and saving money on purchases from any online store."
   },
   "name": {
     "en-US": "AI Price Tracker"
@@ -21,7 +23,27 @@
   "version": {
     "license": "MIT",
     "release_notes": {
-      "en-US": "Initial release featuring:\n• Automatic price extraction using OpenAI API\n• Price history tracking with date stamps\n• Cross-device synchronization\n• Popup and sidebar viewing modes\n• Support for any e-commerce website"
+      "1.2.4": {
+        "en-US": "Bug fixes and improvements"
+      },
+      "1.2.3": {
+        "en-US": "* Update initialization logic and price check procedures\n* Refine startup checks"
+      },
+      "1.2.2": {
+        "en-US": "Bug fixes and improvements"
+      },
+      "1.2.1": {
+        "en-US": "Bug fixes and improvements"
+      },
+      "1.2.0": {
+        "en-US": "Added automated price alerts"
+      },
+      "1.1.0": {
+        "en-US": "Fixes and improvements"
+      },
+      "1.0.0": {
+        "en-US": "Initial release featuring:\n• Automatic price extraction using OpenAI API\n• Price history tracking with date stamps\n• Cross-device synchronization\n• Popup and sidebar viewing modes\n• Support for any e-commerce website"
+      }
     },
     "compatibility": {
       "firefox": {
