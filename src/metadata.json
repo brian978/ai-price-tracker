@@ -22,29 +22,6 @@
   "default_locale": "en-US",
   "version": {
     "license": "MIT",
-    "release_notes": {
-      "1.2.4": {
-        "en-US": "Bug fixes and improvements"
-      },
-      "1.2.3": {
-        "en-US": "* Update initialization logic and price check procedures\n* Refine startup checks"
-      },
-      "1.2.2": {
-        "en-US": "Bug fixes and improvements"
-      },
-      "1.2.1": {
-        "en-US": "Bug fixes and improvements"
-      },
-      "1.2.0": {
-        "en-US": "Added automated price alerts"
-      },
-      "1.1.0": {
-        "en-US": "Fixes and improvements"
-      },
-      "1.0.0": {
-        "en-US": "Initial release featuring:\n• Automatic price extraction using OpenAI API\n• Price history tracking with date stamps\n• Cross-device synchronization\n• Popup and sidebar viewing modes\n• Support for any e-commerce website"
-      }
-    },
     "compatibility": {
       "firefox": {
         "min": "139.0",
