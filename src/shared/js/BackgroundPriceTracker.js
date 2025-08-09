@@ -65,12 +65,12 @@ class BackgroundPriceTracker {
       const results = await browser.tabs.executeScript(tab.id, {
         code: `
           // Get the body content
-          let bodyElement = document.body;
-          let bodyText = bodyElement ? bodyElement.innerText : '';
+          var bodyElement = document.body;
+          var bodyText = bodyElement ? bodyElement.innerText : '';
 
           // Return half of the body content to avoid too large requests
-          const halfLength = Math.floor(bodyText.length / 2);
-          const halfBodyContent = bodyText.substring(0, halfLength);
+          var halfLength = Math.floor(bodyText.length / 2);
+          var halfBodyContent = bodyText.substring(0, halfLength);
 
           ({
             title: document.title,

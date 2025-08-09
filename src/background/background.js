@@ -64,30 +64,30 @@ browser.storage.onChanged.addListener(async (changes, areaName) => {
 browser.runtime.onInstalled.addListener((details) => {
   // Initialize view mode
   viewModeManager.initializeViewMode().then(r => "View mode initialized");
-  
-  // Initialize price tracking scheduler
+
+  // Initialize price tracking scheduler (this will handle startup checks internally)
   priceCheckScheduler.initialize().then(r => "Price checker initialized");
-  
-  // When the extension is refreshed/updated, check all tracked items immediately
-  if (details.reason === 'update' || details.reason === 'install') {
-    logger.logSync('Extension was refreshed/updated, checking all tracked items immediately');
-    setTimeout(() => priceCheckScheduler.checkAllTrackedItemsOnRefresh(), 3000);
-  }
+
+  // Note: Removed duplicate checkAllTrackedItemsOnRefresh call since initialize() already handles startup checks
 });
 
 browser.runtime.onStartup.addListener(() => {
   // Initialize view mode
   viewModeManager.initializeViewMode();
-  
-  // Initialize price tracking scheduler
+
+  // Initialize price tracking scheduler (this will handle startup checks internally)
   priceCheckScheduler.initialize();
 });
 
 // Listen for messages from the popup/sidebar
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'trackPrice') {
-    priceTracker.trackPrice(message.url, message.apiKey)
-      .then(result => {
+    priceTracker.trackPrice(message.url, message.apiKey).then(async result => {
+      // Save the tracking data immediately in the background script
+      // This ensures data is saved even if popup closes before receiving response
+      await dataManager.addPriceToHistory(message.url, result.name,
+          result.price, result.imageUrl);
+        
         // After tracking the price, set up periodic checking for this URL
         priceTracker.setupPriceTracking(message.url, result.price, result.name, result.imageUrl);
         sendResponse(result);

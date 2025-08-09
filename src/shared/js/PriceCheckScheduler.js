@@ -9,6 +9,7 @@ class PriceCheckScheduler {
     this.PRICE_CHECK_ALARM_NAME = 'priceCheckAlarm';
     this.checkInterval = null;
     this.lastCheckTime = null;
+    this.isInitialized = false;
   }
 
   /**
@@ -16,6 +17,13 @@ class PriceCheckScheduler {
    */
   async initialize() {
     try {
+      // Prevent duplicate initialization
+      if (this.isInitialized) {
+        this.logger.logSync(
+            'PriceCheckScheduler already initialized, skipping...');
+        return;
+      }
+      
       // Check if the price alarm is enabled and get tracked prices from local storage
       const result = await browser.storage.local.get(['priceAlarmEnabled', 'trackedPrices']);
       this.logger.logSync('Successfully retrieved data from local storage');
@@ -64,6 +72,7 @@ class PriceCheckScheduler {
       }
       
       this.logger.logSync('Price checking scheduler initialized');
+      this.isInitialized = true;
     } catch (error) {
       this.logger.errorSync('Error initializing price checking scheduler:', error);
     }

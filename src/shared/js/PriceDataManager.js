@@ -302,8 +302,17 @@ class PriceDataManager {
           trackedItem.history.shift(); // Remove oldest entry
         }
       }
-      
+
+      // Update trackedItems storage to keep it in sync
+      const trackedItems = await this.getTrackedItems();
+      trackedItems[url] = {
+        name: trackedItem.name,
+        imageUrl: trackedItem.imageUrl || '',
+      };
+
+      // Save both trackedPrices and trackedItems
       await this.saveTrackedPrices(trackedPrices);
+      await this.saveTrackedItems(trackedItems);
       return true;
     } catch (error) {
       logger.errorSync('Error adding price to history:', error);

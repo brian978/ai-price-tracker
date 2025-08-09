@@ -36,6 +36,9 @@ class PriceTracker {
     // Set up tab change listeners to update display when user navigates to different pages
     this.setupTabChangeListeners();
 
+    // Set up storage change listener to refresh display when data is updated
+    this.setupStorageChangeListener();
+
     // Load saved data (this will also display the data)
     await this.loadData();
   }
@@ -260,6 +263,23 @@ class PriceTracker {
   }
 
   /**
+   * Set up storage change listener to refresh display when data is updated
+   */
+  setupStorageChangeListener() {
+    browser.storage.onChanged.addListener(async (changes, areaName) => {
+      if (areaName === 'local') {
+        // Check if tracked prices or items were updated
+        if (changes.trackedPrices || changes.trackedItems) {
+          logger.logSync('Storage changes detected, refreshing popup display');
+
+          // Reload data and refresh display
+          await this.loadData();
+        }
+      }
+    });
+  }
+
+  /**
    * Track price function
    */
   async trackPrice() {
@@ -312,18 +332,7 @@ class PriceTracker {
         throw new Error(response.error);
       }
 
-      // Use data manager to add price to history
-      await this.dataManager.addPriceToHistory(url, response.name, response.price, response.imageUrl);
-
-      // Update tracked items
-      if (!this.trackedItems[url]) {
-        this.trackedItems[url] = {
-          name: response.name,
-          imageUrl: response.imageUrl
-        };
-      }
-
-      // Reload data to sync with storage
+      // Data is already saved by the background script, just reload from storage to sync display
       await this.loadData();
 
       // Show success notification
