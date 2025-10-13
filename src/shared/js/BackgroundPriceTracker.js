@@ -65,16 +65,16 @@ class BackgroundPriceTracker {
       const results = await browser.tabs.executeScript(tab.id, {
         code: `
           // Get the body content
-          var bodyElement = document.body;
-          var bodyText = bodyElement ? bodyElement.innerText : '';
+          const bodyElement = document.body;
+          const bodyText = bodyElement ? bodyElement.innerText : '';
 
-          // Return half of the body content to avoid too large requests
-          var halfLength = Math.floor(bodyText.length / 2);
-          var halfBodyContent = bodyText.substring(0, halfLength);
+          // Return 75% of the body content to avoid too large requests
+          const threeFourthsLength = Math.floor(bodyText.length * 0.75);
+          const threeFourthsBodyContent = bodyText.substring(0, threeFourthsLength);
 
           ({
             title: document.title,
-            bodyContent: halfBodyContent,
+            bodyContent: threeFourthsBodyContent,
             url: "${targetUrl || ''}" || window.location.href
           });
         `
@@ -128,7 +128,7 @@ class BackgroundPriceTracker {
               `I don't have the page content, but I need you to analyze the URL: ${pageUrl}
                Please extract product information directly from the URL structure.` 
               : 
-              `Page Content (first half of body):
+              `Page Content (first 75% of body):
                ${bodyContent}`
             }
 
@@ -173,11 +173,7 @@ class BackgroundPriceTracker {
           'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-2025-04-14',
-          tool_choice: 'required',
-          tools: [
-            { type: 'web_search_preview' },
-          ],
+          model: 'gpt-5',
           instructions: 'You are a helpful assistant that extracts product information from webpages. Do NOT use existing knowledge. Return only a raw JSON string on a single line, with no code block formatting or markdown. Example: {"name": "Product name", "price": "100.00"}',
           input: prompt,
           temperature: 0.3,
@@ -287,13 +283,13 @@ class BackgroundPriceTracker {
         .replace(/\s+/g, ' ') // Normalize whitespace
         .trim();
       
-      // Return half of the body content to avoid too large requests
-      const halfLength = Math.min(10000, Math.floor(bodyText.length / 2)); // Limit to 10K chars max
-      const halfBodyContent = bodyText.substring(0, halfLength);
+      // Return 75% of the body content to avoid too large requests
+      const threeFourthsLength = Math.floor(bodyText.length * 0.75);
+      const threeFourthsBodyContent = bodyText.substring(0, threeFourthsLength);
       
       return {
         title: title,
-        bodyContent: halfBodyContent,
+        bodyContent: threeFourthsBodyContent,
         url: url
       };
     } catch (error) {
